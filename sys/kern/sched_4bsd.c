@@ -58,6 +58,8 @@ __FBSDID("$FreeBSD$");
 #include <machine/pcb.h>
 #include <machine/smp.h>
 
+#include <sys/sched_petri.h>
+
 #ifdef HWPMC_HOOKS
 #include <sys/pmckern.h>
 #endif
@@ -319,6 +321,9 @@ maybe_preempt(struct thread *td)
 	struct thread *ctd;
 	int cpri, pri;
 
+	struct td_sched *ts;
+	ts = td_get_sched(td);
+
 	/*
 	 * The new thread should not preempt the current thread if any of the
 	 * following conditions are true:
@@ -368,6 +373,7 @@ maybe_preempt(struct thread *td)
 	MPASS(ctd->td_lock == td->td_lock);
 	MPASS(TD_ON_RUNQ(td));
 	TD_SET_RUNNING(td);
+
 	CTR3(KTR_PROC, "preempting to thread %p (pid %d, %s)\n", td,
 	    td->td_proc->p_pid, td->td_name);
 	mi_switch(SW_INVOL | SW_PREEMPT | SWT_PREEMPT, td);
@@ -657,7 +663,7 @@ sched_setup(void *dummy)
 {
 
 	setup_runqs();
-
+	init_resource_net();
 	/* Account for thread0. */
 	sched_load_add();
 }
@@ -693,6 +699,12 @@ schedinit(void)
 	thread0.td_lock = &sched_lock;
 	td_get_sched(&thread0)->ts_slice = sched_slice;
 	mtx_init(&sched_lock, "sched lock", NULL, MTX_SPIN | MTX_RECURSE);
+
+	int initial_mark_t0[PLACES_SIZE] = { 0, 0, 0, 1, 0 };
+	int i;
+	for (i = 0; i < PLACES_SIZE; i++) {
+		thread0.mark[i] = initial_mark_t0[i];
+	}
 }
 
 int
@@ -797,7 +809,6 @@ void
 sched_fork_thread(struct thread *td, struct thread *childtd)
 {
 	struct td_sched *ts, *tsc;
-
 	childtd->td_oncpu = NOCPU;
 	childtd->td_lastcpu = NOCPU;
 	childtd->td_lock = &sched_lock;
@@ -997,6 +1008,8 @@ sched_switch(struct thread *td, struct thread *newtd, int flags)
 	td->td_owepreempt = 0;
 	td->td_oncpu = NOCPU;
 
+	resource_expulse_thread(td, flags);
+
 	/*
 	 * At the last moment, if this thread is still marked RUNNING,
 	 * then put it back on the run queue as it has not been suspended
@@ -1031,10 +1044,20 @@ sched_switch(struct thread *td, struct thread *newtd, int flags)
         	TD_SET_RUNNING(newtd);
 		if ((newtd->td_flags & TDF_NOLOAD) == 0)
 			sched_load_add();
+
+		if (ts->ts_runq != &runq){
+			resource_fire_net(newtd, TRAN_UNQUEUE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+		}
+		else{
+			resource_fire_net(newtd, TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+		}
+
 	} else {
 		newtd = choosethread();
 		MPASS(newtd->td_lock == &sched_lock);
 	}
+	
+	resource_execute_thread(newtd, PCPU_GET(cpuid));
 
 	if (td != newtd) {
 #ifdef	HWPMC_HOOKS
@@ -1108,6 +1131,7 @@ sched_wakeup(struct thread *td)
 	td->td_slptick = 0;
 	ts->ts_slptime = 0;
 	ts->ts_slice = sched_slice;
+	//thread_petri_fire(td, TRAN_WAKEUP);
 	sched_add(td, SRQ_BORING);
 }
 
@@ -1237,26 +1261,18 @@ kick_other_cpu(int pri, int cpuid)
 static int
 sched_pickcpu(struct thread *td)
 {
-	int best, cpu;
+	int transition, cpu;
 
 	mtx_assert(&sched_lock, MA_OWNED);
 
-	if (td->td_lastcpu != NOCPU && THREAD_CAN_SCHED(td, td->td_lastcpu))
-		best = td->td_lastcpu;
-	else
-		best = NOCPU;
-	CPU_FOREACH(cpu) {
-		if (!THREAD_CAN_SCHED(td, cpu))
-			continue;
-	
-		if (best == NOCPU)
-			best = cpu;
-		else if (runq_length[cpu] < runq_length[best])
-			best = cpu;
-	}
-	KASSERT(best != NOCPU, ("no valid CPUs"));
+	transition = resource_choose_cpu(td);
 
-	return (best);
+	if (transition == TRAN_QUEUE_GLOBAL)
+		cpu = -1;
+	else
+		cpu = (int)(transition / CPU_BASE_TRANSITIONS);
+
+	return (cpu);
 }
 #endif
 
@@ -1264,102 +1280,93 @@ void
 sched_add(struct thread *td, int flags)
 #ifdef SMP
 {
-	cpuset_t tidlemsk;
-	struct td_sched *ts;
-	u_int cpu, cpuid;
-	int forwarded = 0;
-	int single_cpu = 0;
-
-	ts = td_get_sched(td);
-	THREAD_LOCK_ASSERT(td, MA_OWNED);
-	KASSERT((td->td_inhibitors == 0),
-	    ("sched_add: trying to run inhibited thread"));
-	KASSERT((TD_CAN_RUN(td) || TD_IS_RUNNING(td)),
-	    ("sched_add: bad thread state"));
-	KASSERT(td->td_flags & TDF_INMEM,
-	    ("sched_add: thread swapped out"));
-
-	KTR_STATE2(KTR_SCHED, "thread", sched_tdname(td), "runq add",
-	    "prio:%d", td->td_priority, KTR_ATTR_LINKED,
-	    sched_tdname(curthread));
-	KTR_POINT1(KTR_SCHED, "thread", sched_tdname(curthread), "wokeup",
-	    KTR_ATTR_LINKED, sched_tdname(td));
-	SDT_PROBE4(sched, , , enqueue, td, td->td_proc, NULL, 
-	    flags & SRQ_PREEMPTED);
-
-
-	/*
-	 * Now that the thread is moving to the run-queue, set the lock
-	 * to the scheduler's lock.
-	 */
-	if (td->td_lock != &sched_lock) {
-		mtx_lock_spin(&sched_lock);
-		thread_lock_set(td, &sched_lock);
+	if(td && ((td)->td_frominh == 1)) {
+		thread_petri_fire(td, TRAN_WAKEUP);
+		td->td_frominh = 0;
 	}
-	TD_SET_RUNQ(td);
 
-	/*
-	 * If SMP is started and the thread is pinned or otherwise limited to
-	 * a specific set of CPUs, queue the thread to a per-CPU run queue.
-	 * Otherwise, queue the thread to the global run queue.
-	 *
-	 * If SMP has not yet been started we must use the global run queue
-	 * as per-CPU state may not be initialized yet and we may crash if we
-	 * try to access the per-CPU run queues.
-	 */
-	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
-	    ts->ts_flags & TSF_AFFINITY)) {
-		if (td->td_pinned != 0)
-			cpu = td->td_lastcpu;
-		else if (td->td_flags & TDF_BOUND) {
-			/* Find CPU from bound runq. */
-			KASSERT(SKE_RUNQ_PCPU(ts),
-			    ("sched_add: bound td_sched not on cpu runq"));
-			cpu = ts->ts_runq - &runq_pcpu[0];
-		} else
-			/* Find a valid CPU for our cpuset */
-			cpu = sched_pickcpu(td);
+	cpuset_t tidlemsk;
+    struct td_sched *ts;
+    u_int cpu, cpuid;
+    int forwarded = 0;
+    int single_cpu = 0;
+  
+    ts = td_get_sched(td);
+    THREAD_LOCK_ASSERT(td, MA_OWNED);
+    KASSERT((td->td_inhibitors == 0),
+        ("sched_add: trying to run inhibited thread"));
+    KASSERT((TD_CAN_RUN(td) || TD_IS_RUNNING(td)),
+        ("sched_add: bad thread state"));
+    KASSERT(td->td_flags & TDF_INMEM,
+        ("sched_add: thread swapped out"));
+  
+    KTR_STATE2(KTR_SCHED, "thread", sched_tdname(td), "runq add",
+        "prio:%d", td->td_priority, KTR_ATTR_LINKED,
+        sched_tdname(curthread));
+    KTR_POINT1(KTR_SCHED, "thread", sched_tdname(curthread), "wokeup",
+        KTR_ATTR_LINKED, sched_tdname(td));
+    SDT_PROBE4(sched, , , enqueue, td, td->td_proc, NULL, 
+        flags & SRQ_PREEMPTED); 
+ 
+    /*
+    * Now that the thread is moving to the run-queue, set the lock
+    * to the scheduler's lock.
+    */
+    if (td->td_lock != &sched_lock) {
+            mtx_lock_spin(&sched_lock);
+            thread_lock_set(td, &sched_lock);
+    }
+    TD_SET_RUNQ(td); 
+    /*
+    * If SMP is started and the thread is pinned or otherwise limited to
+    * a specific set of CPUs, queue the thread to a per-CPU run queue.
+    * Otherwise, queue the thread to the global run queue.
+    *
+    * If SMP has not yet been started we must use the global run queue
+    * as per-CPU state may not be initialized yet and we may crash if we
+    * try to access the per-CPU run queues.
+    */	
+	cpu = sched_pickcpu(td);
+	if (cpu != NOCPU) {
 		ts->ts_runq = &runq_pcpu[cpu];
 		single_cpu = 1;
-		CTR3(KTR_RUNQ,
-		    "sched_add: Put td_sched:%p(td:%p) on cpu%d runq", ts, td,
-		    cpu);
-	} else {
-		CTR2(KTR_RUNQ,
-		    "sched_add: adding td_sched:%p (td:%p) to gbl runq", ts,
-		    td);
-		cpu = NOCPU;
+		resource_fire_net(td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
+	}
+	else {
 		ts->ts_runq = &runq;
+		resource_fire_net(td, TRAN_QUEUE_GLOBAL);
 	}
 
-	cpuid = PCPU_GET(cpuid);
-	if (single_cpu && cpu != cpuid) {
-	        kick_other_cpu(td->td_priority, cpu);
-	} else {
-		if (!single_cpu) {
-			tidlemsk = idle_cpus_mask;
-			CPU_NAND(&tidlemsk, &hlt_cpus_mask);
-			CPU_CLR(cpuid, &tidlemsk);
-
-			if (!CPU_ISSET(cpuid, &idle_cpus_mask) &&
-			    ((flags & SRQ_INTR) == 0) &&
-			    !CPU_EMPTY(&tidlemsk))
-				forwarded = forward_wakeup(cpu);
-		}
-
-		if (!forwarded) {
-			if ((flags & SRQ_YIELDING) == 0 && maybe_preempt(td))
-				return;
-			else
-				maybe_resched(td);
-		}
-	}
-
-	if ((td->td_flags & TDF_NOLOAD) == 0)
-		sched_load_add();
+    cpuid = PCPU_GET(cpuid);
+    if (single_cpu && cpu != cpuid) {
+            kick_other_cpu(td->td_priority, cpu);
+    } else {
+            if (!single_cpu) {
+                    tidlemsk = idle_cpus_mask;
+                    CPU_NAND(&tidlemsk, &hlt_cpus_mask);
+                    CPU_CLR(cpuid, &tidlemsk);
+  
+                    if (!CPU_ISSET(cpuid, &idle_cpus_mask) &&
+                        ((flags & SRQ_INTR) == 0) &&
+                        !CPU_EMPTY(&tidlemsk))
+                            forwarded = forward_wakeup(cpu);
+            }
+  
+            if (!forwarded) {
+                    if ((flags & SRQ_YIELDING) == 0 && maybe_preempt(td))
+                    	return;            
+                    else
+                            maybe_resched(td);
+            }
+    }
+  
+    if ((td->td_flags & TDF_NOLOAD) == 0)
+            sched_load_add();
+	
 	runq_add(ts->ts_runq, td, flags);
-	if (cpu != NOCPU)
-		runq_length[cpu]++;
+	if (cpu != NOCPU) {
+		runq_length[cpu]++;	
+	}	
 }
 #else /* SMP */
 {
@@ -1432,8 +1439,13 @@ sched_rem(struct thread *td)
 	if ((td->td_flags & TDF_NOLOAD) == 0)
 		sched_load_rem();
 #ifdef SMP
-	if (ts->ts_runq != &runq)
+	if (ts->ts_runq != &runq) {
 		runq_length[ts->ts_runq - runq_pcpu]--;
+		resource_remove_thread(td, (ts->ts_runq - runq_pcpu));
+	}
+	else {
+		resource_fire_net(td, TRAN_REMOVE_GLOBAL_QUEUE);
+	}
 #endif
 	runq_remove(ts->ts_runq, td);
 	TD_SET_CAN_RUN(td);
@@ -1464,19 +1476,25 @@ sched_choose(void)
 		     PCPU_GET(cpuid));
 		td = tdcpu;
 		rq = &runq_pcpu[PCPU_GET(cpuid)];
-	} else {
+
+		if(td) {
+			resource_fire_net(td, TRAN_UNQUEUE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+		}
+	} else{
 		CTR1(KTR_RUNQ, "choosing td_sched %p from main runq", td);
+		resource_fire_net(td, TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 	}
 
 #else
 	rq = &runq;
 	td = runq_choose(&runq);
 #endif
-
 	if (td) {
 #ifdef SMP
 		if (td == tdcpu)
+		{
 			runq_length[PCPU_GET(cpuid)]--;
+		}
 #endif
 		runq_remove(rq, td);
 		td->td_flags |= TDF_DIDRUN;
@@ -1485,6 +1503,12 @@ sched_choose(void)
 		    ("sched_choose: thread swapped out"));
 		return (td);
 	}
+	if(PCPU_GET(idlethread)->td_frominh == 1) {
+		thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
+		PCPU_GET(idlethread)->td_frominh = 0;
+	}
+	resource_fire_net(PCPU_GET(idlethread), TRAN_QUEUE_GLOBAL);
+	resource_fire_net(PCPU_GET(idlethread), TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 	return (PCPU_GET(idlethread));
 }
 
@@ -1684,10 +1708,14 @@ sched_throw(struct thread *td)
 		MPASS(td->td_lock == &sched_lock);
 		td->td_lastcpu = td->td_oncpu;
 		td->td_oncpu = NOCPU;
+		resource_expulse_thread(td, SW_VOL);
 	}
 	mtx_assert(&sched_lock, MA_OWNED);
 	KASSERT(curthread->td_md.md_spinlock_count == 1, ("invalid count"));
-	cpu_throw(td, choosethread());	/* doesn't return */
+	struct thread *newtd;
+	newtd = choosethread();
+	resource_execute_thread(newtd, PCPU_GET(cpuid));
+	cpu_throw(td, newtd);	/* doesn't return */
 }
 
 void
