@@ -38,6 +38,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/lock.h>
 #include <sys/mutex.h>
 #include <sys/proc.h>
+#include <sys/sched_petri.h>
 #include <sys/rangelock.h>
 #include <sys/resourcevar.h>
 #include <sys/sdt.h>
@@ -406,6 +407,7 @@ thread_alloc(int pages)
 	}
 	cpu_thread_alloc(td);
 	vm_domain_policy_init(&td->td_vm_dom_policy);
+	init_petri_thread(td);
 	return (td);
 }
 
