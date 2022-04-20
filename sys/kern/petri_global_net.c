@@ -331,3 +331,10 @@ printf("Colas de CPU: CPU_0 %d CPU_1 %d CPU_2 %d CPU_3 %d \n", resource_net.mark
 	resource_net.mark[PLACE_QUEUE + (3*CPU_BASE_PLACES)]);
                          
 }
+
+void print_cpu_places() {
+	printf("PLACE CPU_0: %d \n", resource_net.mark[PLACE_CPU + (0*CPU_BASE_PLACES)]);
+	printf("PLACE CPU_1: %d \n", resource_net.mark[PLACE_CPU + (1*CPU_BASE_PLACES)]);
+	printf("PLACE CPU_2: %d \n", resource_net.mark[PLACE_CPU + (2*CPU_BASE_PLACES)]);
+	printf("PLACE CPU_3: %d \n", resource_net.mark[PLACE_CPU + (3*CPU_BASE_PLACES)]);
+}
