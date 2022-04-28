@@ -84,6 +84,7 @@ _Static_assert(offsetof(struct thread, td_frame) == 0x418,
     "struct thread KBI td_frame");
 _Static_assert(offsetof(struct thread, td_emuldata) == 0x4c0,
     "struct thread KBI td_emuldata");
+
 _Static_assert(offsetof(struct proc, p_flag) == 0xb0,
     "struct proc KBI p_flag");
 _Static_assert(offsetof(struct proc, p_pid) == 0xbc,
