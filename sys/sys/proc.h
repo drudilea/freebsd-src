@@ -245,8 +245,6 @@ struct thread {
 	uint64_t	padding1[4];
 	void		*padding2[4];
 	int 	td_frominh;		/* Thread comes from an inhibited state*/
-	sigqueue_t	td_sigqueue;	/* (c) Sigs arrived, not delivered. */
-#define	td_siglist	td_sigqueue.sq_signals
 	u_char		td_lend_user_pri; /* (t) Lend user pri. */
 
 /* Cleared during fork1() */
