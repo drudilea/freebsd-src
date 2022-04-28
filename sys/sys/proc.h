@@ -244,7 +244,6 @@ struct thread {
 	lwpid_t		td_tid;		/* (b) Thread ID. */
 	uint64_t	padding1[4];
 	void		*padding2[4];
-	int 	td_frominh;		/* Thread comes from an inhibited state*/
 	u_char		td_lend_user_pri; /* (t) Lend user pri. */
 
 /* Cleared during fork1() */
@@ -360,6 +359,7 @@ struct thread {
 	int		td_lastcpu;	/* (t) Last cpu we were on. */
 	int		td_oncpu;	/* (t) Which cpu we are on. */
 	sbintime_t	td_sleeptimo;	/* (t) Sleep timeout. */
+	int 	td_frominh;		/* Thread comes from an inhibited state*/
 	sigqueue_t	td_sigqueue;	/* (c) Sigs arrived, not delivered. */
 #define	td_siglist	td_sigqueue.sq_signals
 	int mark[PLACES_SIZE];
