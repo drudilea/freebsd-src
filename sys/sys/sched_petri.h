@@ -69,5 +69,6 @@ void resource_remove_thread(struct thread *newtd, int cpu);
 void print_resource_net(void);
 void print_uni_label(void);
 void print_cpu_places(void);
+void print_detailed_places(void);
 
 #endif
