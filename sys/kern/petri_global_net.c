@@ -64,7 +64,7 @@ const int hierarchical_corresponse[] = { TRAN_ON_QUEUE, TRAN_SET_RUNNING, TRAN_S
 
 static __inline int transition_is_sensitized(int transition_index);
 static void resource_fire_single_transition(struct thread *pt, int transition_index);
-static int get_automatic_transitions_sensitized();
+static int get_automatic_transitions_sensitized(void);
 
 void init_resource_net()
 {
