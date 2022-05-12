@@ -1,7 +1,7 @@
 /*
  ============================================================================
  Name        : PetriGlobalNet.c
- Author      : 
+ Author      :
  Version     :
  Copyright   : Your copyright notice
  Description : Hello World in C, Ansi-style
@@ -89,7 +89,7 @@ void init_resource_net()
 		}*/
 		//Represents arc going to the throw global transition
 		resource_net.incidence_matrix[(num_cpu*CPU_BASE_PLACES)][TRAN_THROW] = -1;
-		
+
 		//Set up initial marking
 		if (num_cpu != 0) { //CPU0 starts with no token since it will be the initialization thread who is using it until it returns
 			resource_net.mark[2 + (num_cpu*CPU_BASE_PLACES)] = 1;
@@ -152,7 +152,7 @@ void resource_get_sensitized()
 
 void resource_fire_net(struct thread *pt, int transition_index)
 {
-	int i; 
+	int i;
 
 	if(pt) {
 		int automatic_transition;
@@ -176,7 +176,7 @@ void resource_fire_net(struct thread *pt, int transition_index)
 			print_resource_net();
 		}
 	}
-	
+
 	for(i=0; i<4; i++){
 		if(resource_net.mark[PLACE_QUEUE + (i*CPU_BASE_PLACES)] <= 5)
 			return;
@@ -201,11 +201,11 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	}
 }
 
-static int get_automatic_transitions_sensitized() 
+static int get_automatic_transitions_sensitized()
 {
 	int num_transition;
 	/*FIXME - RIGHT now there is only one automatic transition, if
-	this is the case by the end we could hardcode the transition number 
+	this is the case by the end we could hardcode the transition number
 	instead of looping the whole array*/
 	for (num_transition = 0; num_transition< CPU_NUMBER_TRANSITION; num_transition++) {
 		if (resource_net.is_automatic_transition[num_transition] && transition_is_sensitized(num_transition)) {
@@ -216,13 +216,13 @@ static int get_automatic_transitions_sensitized()
 	return -1;
 }
 
-static __inline int transition_is_sensitized(int transition_index) 
+static __inline int transition_is_sensitized(int transition_index)
 {
 	int places_index;
 
 	for (places_index = 0; places_index < CPU_NUMBER_PLACES; places_index++) {
 
-		if (((resource_net.incidence_matrix[places_index][transition_index] < 0) && 
+		if (((resource_net.incidence_matrix[places_index][transition_index] < 0) &&
 			//If incidence is positive we really dont care if there are tokens or not
 			((resource_net.incidence_matrix[places_index][transition_index] + resource_net.mark[places_index]) < 0)) ||
 			is_inhibited(places_index, transition_index))
@@ -234,7 +234,7 @@ static __inline int transition_is_sensitized(int transition_index)
 	return 1;
 }
 
-int resource_choose_cpu(struct thread* td) 
+int resource_choose_cpu(struct thread* td)
 {
 	//First we need to know which of the cpu queues is sensitized
 	int transition_index;
@@ -260,11 +260,9 @@ int resource_choose_cpu(struct thread* td)
 				return transition_index;
 			else
 				cpu_available = transition_index;
-		
 		}
-		
 	}
-	
+
 	KASSERT(cpu_available == NOCPU, ("no valid CPUs"));
 	//printf("Resource choose cpu: transition %d\n", cpu_available);
 	return cpu_available;
@@ -281,10 +279,8 @@ void resource_expulse_thread(struct thread *td, int flags) {
 		transition_number = (td->td_lastcpu * CPU_BASE_TRANSITIONS) + TRAN_RETURN_INVOL;
 		(td)->td_frominh = 0;
 	}
-		
 	//printf("Resource expulse thread: transition %d\n", transition_number);
 	resource_fire_net(td, transition_number);
-	 
 }
 
 void resource_execute_thread(struct thread *newtd, int cpu) {
@@ -320,14 +316,35 @@ void print_resource_net() {
 
 void print_uni_label() {
 printf("_____    ____ U _____ u  _____  __   __  _   _     \n");
-printf(" |\" ___|U /\"___|\\| ___\"|/ |\" ___| \\ \\ / / | \\ |\"|   \n"); 
-printf("U| |_  u\\| | u   |  _|\"  U| |_  u  \\ V / <|  \\| |>  \n"); 
-printf("\\|  _|/  | |/__  | |___  \\|  _|/  U_|\"|_uU| |\\  |u  \n"); 
-printf(" |_|      \\____| |_____|  |_|       |_|   |_| \\_|   \n"); 
-printf(" )(\\\\,-  _// \\\\  <<   >>  )(\\\\,-.-,//|(_  ||   \\\\,-.\n"); 
-printf("(__)(_/ (__)(__)(__) (__)(__)(_/ \\_) (__) (_\")  (_/ \n"); 
+printf(" |\" ___|U /\"___|\\| ___\"|/ |\" ___| \\ \\ / / | \\ |\"|   \n");
+printf("U| |_  u\\| | u   |  _|\"  U| |_  u  \\ V / <|  \\| |>  \n");
+printf("\\|  _|/  | |/__  | |___  \\|  _|/  U_|\"|_uU| |\\  |u  \n");
+printf(" |_|      \\____| |_____|  |_|       |_|   |_| \\_|   \n");
+printf(" )(\\\\,-  _// \\\\  <<   >>  )(\\\\,-.-,//|(_  ||   \\\\,-.\n");
+printf("(__)(_/ (__)(__)(__) (__)(__)(_/ \\_) (__) (_\")  (_/ \n");
 printf("Colas de CPU: CPU_0 %d CPU_1 %d CPU_2 %d CPU_3 %d \n", resource_net.mark[PLACE_QUEUE + (0*CPU_BASE_PLACES)],
-	resource_net.mark[PLACE_QUEUE + (1*CPU_BASE_PLACES)], resource_net.mark[PLACE_QUEUE + (2*CPU_BASE_PLACES)], 
+	resource_net.mark[PLACE_QUEUE + (1*CPU_BASE_PLACES)], resource_net.mark[PLACE_QUEUE + (2*CPU_BASE_PLACES)],
 	resource_net.mark[PLACE_QUEUE + (3*CPU_BASE_PLACES)]);
-                         
+}
+
+void print_cpu_places() {
+	printf("PLACE CPU_0: %d \n", resource_net.mark[PLACE_CPU + (0*CPU_BASE_PLACES)]);
+	printf("PLACE CPU_1: %d \n", resource_net.mark[PLACE_CPU + (1*CPU_BASE_PLACES)]);
+	printf("PLACE CPU_2: %d \n", resource_net.mark[PLACE_CPU + (2*CPU_BASE_PLACES)]);
+	printf("PLACE CPU_3: %d \n", resource_net.mark[PLACE_CPU + (3*CPU_BASE_PLACES)]);
+}
+
+void print_detailed_places() {
+	for (int i = 0; i < CPU_NUMBER; i++)
+	{
+		printf("%d -> PLACE_CANTQ_%d \n", resource_net.mark[PLACE_CANTQ + (i*CPU_BASE_PLACES)], i);
+		printf("%d -> PLACE_QUEUE_%d \n", resource_net.mark[PLACE_QUEUE + (i*CPU_BASE_PLACES)], i);
+		printf("%d -> PLACE_CPU_%d \n", resource_net.mark[PLACE_CPU + (i*CPU_BASE_PLACES)], i);
+		printf("%d -> PLACE_TOEXEC_%d \n", resource_net.mark[PLACE_TOEXEC + (i*CPU_BASE_PLACES)], i);
+		printf("%d -> PLACE_EXECUTING_%d \n", resource_net.mark[PLACE_EXECUTING + (i*CPU_BASE_PLACES)], i);
+	}
+
+	printf("%d -> PLACE_GLOBAL_QUEUE \n", resource_net.mark[PLACE_GLOBAL_QUEUE]);
+	printf("%d -> PLACE_SMP_NOT_READY \n", resource_net.mark[PLACE_SMP_NOT_READY]);
+	printf("%d -> PLACE_SMP_READY \n", resource_net.mark[PLACE_SMP_READY]);
 }
