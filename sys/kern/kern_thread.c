@@ -40,6 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/lock.h>
 #include <sys/mutex.h>
 #include <sys/proc.h>
+#include <sys/sched_petri.h>
 #include <sys/rangelock.h>
 #include <sys/resourcevar.h>
 #include <sys/sdt.h>
@@ -412,6 +413,7 @@ thread_alloc(int pages)
 		return (NULL);
 	}
 	cpu_thread_alloc(td);
+	init_petri_thread(td);
 	return (td);
 }
 
