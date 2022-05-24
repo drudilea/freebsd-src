@@ -13,6 +13,7 @@
 #include <sys/cpuset.h>
 #include <sys/smp.h>
 #include <sys/sched_petri.h>
+#include <time.h>
 
 //#include "sched_petri.h"
 
@@ -22,6 +23,7 @@
 
 int smp_set = 0;
 int print_counts = 0;
+int print_transitions = 0;
 struct petri_cpu_resource_net resource_net;
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
@@ -123,6 +125,7 @@ void init_resource_net()
 
 	//Throw transition is automatic
 	resource_net.is_automatic_transition[TRAN_THROW] = 1;
+	print_detailed_places();
 }
 
 static __inline int is_inhibited(int places_index, int transition_index) {
@@ -189,6 +192,12 @@ void resource_fire_net(struct thread *pt, int transition_index)
 static void resource_fire_single_transition(struct thread *pt, int transition_index) {
 	int num_place;
 	int local_transition;
+
+	if(print_transitions < 10){
+		printf("#& %d - Transicion disparada: %2d en el thread %2d&#\n", (int)time(NULL), transition_index, pt->td_tid);
+		print_detailed_places();
+		print_transitions++;
+	}
 
 	//Fire cpu net
 	for (num_place = 0; num_place< CPU_NUMBER_PLACES; num_place++) {
@@ -335,16 +344,17 @@ void print_cpu_places() {
 }
 
 void print_detailed_places() {
-	for (int i = 0; i < CPU_NUMBER; i++)
-	{
-		printf("%d -> PLACE_CANTQ_%d \n", resource_net.mark[PLACE_CANTQ + (i*CPU_BASE_PLACES)], i);
-		printf("%d -> PLACE_QUEUE_%d \n", resource_net.mark[PLACE_QUEUE + (i*CPU_BASE_PLACES)], i);
-		printf("%d -> PLACE_CPU_%d \n", resource_net.mark[PLACE_CPU + (i*CPU_BASE_PLACES)], i);
-		printf("%d -> PLACE_TOEXEC_%d \n", resource_net.mark[PLACE_TOEXEC + (i*CPU_BASE_PLACES)], i);
-		printf("%d -> PLACE_EXECUTING_%d \n", resource_net.mark[PLACE_EXECUTING + (i*CPU_BASE_PLACES)], i);
+	const char *cpu_places[] = { "PLACE_CANTQ", "PLACE_QUEUE", "PLACE_CPU", "PLACE_TOEXEC", "PLACE_EXECUTING" };
+	for (int i = 0; i < CPU_BASE_PLACES; i++){
+		for (int j = 0; j < CPU_NUMBER; j++){
+			printf("\n%d -> %s del PROC%d", resource_net.mark[i + (j*CPU_BASE_PLACES)], cpu_places[i], j);
+		}
 	}
-
 	printf("%d -> PLACE_GLOBAL_QUEUE \n", resource_net.mark[PLACE_GLOBAL_QUEUE]);
 	printf("%d -> PLACE_SMP_NOT_READY \n", resource_net.mark[PLACE_SMP_NOT_READY]);
 	printf("%d -> PLACE_SMP_READY \n", resource_net.mark[PLACE_SMP_READY]);
+}
+
+void set_print_transition(int value) {
+	print_transitions = value;
 }
