@@ -70,6 +70,6 @@ void print_resource_net(void);
 void print_uni_label(void);
 void print_cpu_places(void);
 void print_detailed_places(void);
-void set_print_transition(int value);
+void set_print_transition(int transitions_to_print);
 
 #endif
