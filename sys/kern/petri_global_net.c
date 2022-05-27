@@ -44,6 +44,14 @@ const int base_resource_inhibition_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS]
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
+const char *transitions_names[] = {
+	"TRAN_ADDTOQUEUE_P0", "TRAN_UNQUEUE_P0", "TRAN_EXEC_P0", "TRAN_EXEC_EMPTY_P0", "TRAN_RETURN_VOL_P0", "TRAN_RETURN_INVOL_P0", "TRAN_FROM_GLOBAL_CPU_P0", "TRAN_REMOVE_QUEUE_P0", "TRAN_REMOVE_EMPTY_QUEUE_P0",
+	"TRAN_ADDTOQUEUE_P1", "TRAN_UNQUEUE_P1", "TRAN_EXEC_P1", "TRAN_EXEC_EMPTY_P1", "TRAN_RETURN_VOL_P1", "TRAN_RETURN_INVOL_P1", "TRAN_FROM_GLOBAL_CPU_P1", "TRAN_REMOVE_QUEUE_P1", "TRAN_REMOVE_EMPTY_QUEUE_P1",
+	"TRAN_ADDTOQUEUE_P2", "TRAN_UNQUEUE_P2", "TRAN_EXEC_P2", "TRAN_EXEC_EMPTY_P2", "TRAN_RETURN_VOL_P2", "TRAN_RETURN_INVOL_P2", "TRAN_FROM_GLOBAL_CPU_P2", "TRAN_REMOVE_QUEUE_P2", "TRAN_REMOVE_EMPTY_QUEUE_P2",
+	"TRAN_ADDTOQUEUE_P3", "TRAN_UNQUEUE_P3", "TRAN_EXEC_P3", "TRAN_EXEC_EMPTY_P3", "TRAN_RETURN_VOL_P3", "TRAN_RETURN_INVOL_P3", "TRAN_FROM_GLOBAL_CPU_P3", "TRAN_REMOVE_QUEUE_P3", "TRAN_REMOVE_EMPTY_QUEUE_P3",
+	"TRAN_REMOVE_GLOBAL_QUEUE", "TRAN_START_SMP", "TRAN_THROW", "TRAN_QUEUE_GLOBAL"
+};
+
 const int hierarchical_transitions[] = { TRAN_ADDTOQUEUE, TRAN_EXEC,      TRAN_EXEC_EMPTY, TRAN_RETURN_INVOL, TRAN_RETURN_VOL, TRAN_REMOVE_QUEUE , TRAN_REMOVE_EMPTY_QUEUE, TRAN_QUEUE_GLOBAL, TRAN_REMOVE_GLOBAL_QUEUE };
 const int hierarchical_corresponse[] = { TRAN_ON_QUEUE, TRAN_SET_RUNNING, TRAN_SET_RUNNING, TRAN_SWITCH_OUT, TRAN_TO_WAIT_CHANNEL, TRAN_REMOVE , 	TRAN_REMOVE,   		TRAN_ON_QUEUE , 	TRAN_REMOVE };
 
@@ -205,9 +213,9 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 		thread_petri_fire(pt, local_transition);
 	}
 
-	// Print transitions and PN while booting and when required 
+	// Print transitions and PN while booting and when required
 	if((printed_transitions < transitions_to_print) || !smp_set){
-		printf("\n#& Transicion disparada: %2d en el thread %2d &#", transition_index, pt->td_tid);
+		printf("\n#& %s Transicion: %2d - Thread %2d &#", transitions_names[transition_index], transition_index, pt->td_tid);
 		print_detailed_places();
 		printed_transitions++;
 	}
@@ -350,12 +358,12 @@ void print_detailed_places() {
 	const char *cpu_places[] = { "PLACE_CANTQ", "PLACE_QUEUE", "PLACE_CPU", "PLACE_TOEXEC", "PLACE_EXECUTING" };
 	for (int i = 0; i < CPU_BASE_PLACES; i++){
 		for (int j = 0; j < CPU_NUMBER; j++){
-			printf("\n%d -> %s del PROC%d", resource_net.mark[i + (j*CPU_BASE_PLACES)], cpu_places[i], j);
+			printf("\n#& %d -> %s del PROC%d &#", resource_net.mark[i + (j*CPU_BASE_PLACES)], cpu_places[i], j);
 		}
 	}
-	printf("\n%d -> PLACE_GLOBAL_QUEUE", resource_net.mark[PLACE_GLOBAL_QUEUE]);
-	printf("\n%d -> PLACE_SMP_NOT_READY", resource_net.mark[PLACE_SMP_NOT_READY]);
-	printf("\n%d -> PLACE_SMP_READY", resource_net.mark[PLACE_SMP_READY]);
+	printf("\n#& %d -> PLACE_GLOBAL_QUEUE &#", resource_net.mark[PLACE_GLOBAL_QUEUE]);
+	printf("\n#& %d -> PLACE_SMP_NOT_READY &#", resource_net.mark[PLACE_SMP_NOT_READY]);
+	printf("\n#& %d -> PLACE_SMP_READY &#\n", resource_net.mark[PLACE_SMP_READY]);
 }
 
 void set_print_transition(int number_transitions) {
