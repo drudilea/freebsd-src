@@ -216,7 +216,9 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	// Print transitions and PN while booting and when required
 	if((printed_transitions < transitions_to_print) || !smp_set){
 		printf("\n#& %s Transicion: %2d - Thread %2d &#", transitions_names[transition_index], transition_index, pt->td_tid);
-		print_detailed_places();
+		if(printed_transitions < 5) {
+			print_detailed_places();	
+		}
 		printed_transitions++;
 	}
 }
