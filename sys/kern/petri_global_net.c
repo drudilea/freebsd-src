@@ -22,6 +22,8 @@
 
 int smp_set = 0;
 int print_counts = 0;
+int printed_transitions = 0;
+int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
@@ -40,6 +42,14 @@ const int base_resource_inhibition_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS]
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0}
+};
+
+const char *transitions_names[] = {
+	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0",
+	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1",
+	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2",
+	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3",
+	"REMOVE_GLOBAL_QUEUE", "START_SMP", "THROW", "QUEUE_GLOBAL"
 };
 
 const int hierarchical_transitions[] = { TRAN_ADDTOQUEUE, TRAN_EXEC,      TRAN_EXEC_EMPTY, TRAN_RETURN_INVOL, TRAN_RETURN_VOL, TRAN_REMOVE_QUEUE , TRAN_REMOVE_EMPTY_QUEUE, TRAN_QUEUE_GLOBAL, TRAN_REMOVE_GLOBAL_QUEUE };
@@ -123,6 +133,7 @@ void init_resource_net()
 
 	//Throw transition is automatic
 	resource_net.is_automatic_transition[TRAN_THROW] = 1;
+	print_detailed_places();
 }
 
 static __inline int is_inhibited(int places_index, int transition_index) {
@@ -159,6 +170,8 @@ void resource_fire_net(struct thread *pt, int transition_index)
 
 		if(!smp_set && smp_started) {
 			smp_set = 1;
+			printed_transitions = 0;
+			transitions_to_print = 15;
 			resource_fire_single_transition(pt, TRAN_START_SMP);
 		}
 
@@ -198,6 +211,15 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	if (local_transition) {
 		//If we need to fire a local thread transition we fire it here
 		thread_petri_fire(pt, local_transition);
+	}
+
+	// Print transitions and PN while booting and when required
+	if((printed_transitions < transitions_to_print) || !smp_set){
+		printf("\n#& %s Transicion: %2d - Thread %2d &#", transitions_names[transition_index], transition_index, pt->td_tid);
+		if(printed_transitions < 5) {
+			print_detailed_places();	
+		}
+		printed_transitions++;
 	}
 }
 
@@ -335,16 +357,18 @@ void print_cpu_places() {
 }
 
 void print_detailed_places() {
-	for (int i = 0; i < CPU_NUMBER; i++)
-	{
-		printf("%d -> PLACE_CANTQ_%d \n", resource_net.mark[PLACE_CANTQ + (i*CPU_BASE_PLACES)], i);
-		printf("%d -> PLACE_QUEUE_%d \n", resource_net.mark[PLACE_QUEUE + (i*CPU_BASE_PLACES)], i);
-		printf("%d -> PLACE_CPU_%d \n", resource_net.mark[PLACE_CPU + (i*CPU_BASE_PLACES)], i);
-		printf("%d -> PLACE_TOEXEC_%d \n", resource_net.mark[PLACE_TOEXEC + (i*CPU_BASE_PLACES)], i);
-		printf("%d -> PLACE_EXECUTING_%d \n", resource_net.mark[PLACE_EXECUTING + (i*CPU_BASE_PLACES)], i);
+	const char *cpu_places[] = { "CANTQ", "QUEUE", "CPU", "TOEXEC", "EXECUTING" };
+	for (int i = 0; i < CPU_BASE_PLACES; i++){
+		for (int j = 0; j < CPU_NUMBER; j++){
+			printf("\n#& %d -> %s_P%d &#", resource_net.mark[i + (j*CPU_BASE_PLACES)], cpu_places[i], j);
+		}
 	}
+	printf("\n#& %d -> GLOBAL_QUEUE &#", resource_net.mark[PLACE_GLOBAL_QUEUE]);
+	printf("\n#& %d -> SMP_NOT_READY &#", resource_net.mark[PLACE_SMP_NOT_READY]);
+	printf("\n#& %d -> SMP_READY &#\n", resource_net.mark[PLACE_SMP_READY]);
+}
 
-	printf("%d -> PLACE_GLOBAL_QUEUE \n", resource_net.mark[PLACE_GLOBAL_QUEUE]);
-	printf("%d -> PLACE_SMP_NOT_READY \n", resource_net.mark[PLACE_SMP_NOT_READY]);
-	printf("%d -> PLACE_SMP_READY \n", resource_net.mark[PLACE_SMP_READY]);
+void set_print_transition(int number_transitions) {
+	printed_transitions = 0;
+	transitions_to_print = number_transitions;
 }
