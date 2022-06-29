@@ -24,6 +24,7 @@ int smp_set = 0;
 int print_counts = 0;
 int printed_transitions = 0;
 int transitions_to_print = 0;
+int print_till_break = 1;
 struct petri_cpu_resource_net resource_net;
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
@@ -184,6 +185,7 @@ void resource_fire_net(struct thread *pt, int transition_index)
 			}
 		}
 		else {
+			print_till_break = 0;
 			printf("Transition %2d no sensibilizada para thread %d\n", transition_index, pt->td_tid);
 			printf("Transition %2d: ", transition_index);
 			print_resource_net();
@@ -214,7 +216,7 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	}
 
 	// Print transitions and PN while booting and when required
-	if((printed_transitions < transitions_to_print) || !smp_set){
+	if((printed_transitions < transitions_to_print) || !smp_set || print_till_break){
 		printf("\n#& %s Transicion: %2d - Thread %2d &#", transitions_names[transition_index], transition_index, pt->td_tid);
 		if(printed_transitions < 5) {
 			print_detailed_places();	
