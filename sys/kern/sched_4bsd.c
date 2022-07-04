@@ -1046,13 +1046,12 @@ sched_switch(struct thread *td, int flags)
 		tmtx = thread_lock_block(td);
 		mtx_unlock_spin(tmtx);
 	}
-	
-	resource_execute_thread(newtd, PCPU_GET(cpuid));
 
 	if ((td->td_flags & TDF_NOLOAD) == 0)
 		sched_load_rem();
 
 	newtd = choosethread();
+	resource_execute_thread(newtd, PCPU_GET(cpuid));
 	MPASS(newtd->td_lock == &sched_lock);
 
 #if (KTR_COMPILE & KTR_SCHED) != 0
