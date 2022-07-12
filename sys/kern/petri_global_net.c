@@ -12,6 +12,7 @@
 #include <sys/param.h>
 #include <sys/cpuset.h>
 #include <sys/smp.h>
+#include <sys/time.h>
 #include <sys/sched_petri.h>
 
 //#include "sched_petri.h"
@@ -23,7 +24,7 @@
 int smp_set = 0;
 int print_counts = 0;
 int printed_transitions = 0;
-int transitions_to_print = 0;
+int transitions_to_print = 1;
 struct petri_cpu_resource_net resource_net;
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
@@ -161,7 +162,7 @@ void resource_get_sensitized()
 }
 
 
-void resource_fire_net(struct thread *pt, int transition_index)
+void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 {
 	int i;
 
@@ -170,8 +171,6 @@ void resource_fire_net(struct thread *pt, int transition_index)
 
 		if(!smp_set && smp_started) {
 			smp_set = 1;
-			printed_transitions = 0;
-			transitions_to_print = 15;
 			resource_fire_single_transition(pt, TRAN_START_SMP);
 		}
 
@@ -184,9 +183,13 @@ void resource_fire_net(struct thread *pt, int transition_index)
 			}
 		}
 		else {
-			// TODO: Add a kernel panic exit here. We don't care about post error transitions
-			printf("\n!! %s - Non sensitized transition: %2d - Thread %2d !!", transitions_names[transition_index], transition_index, pt->td_tid);
-			print_detailed_places();
+			if(transitions_to_print) {
+				// TODO: Add a kernel panic exit here. We don't care about post error transitions
+				printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
+				print_detailed_places();
+				printf("!! %d - Printed transitions\n", printed_transitions);
+				transitions_to_print = 0;
+			}
 		}
 	}
 
@@ -202,6 +205,7 @@ void resource_fire_net(struct thread *pt, int transition_index)
 static void resource_fire_single_transition(struct thread *pt, int transition_index) {
 	int num_place;
 	int local_transition;
+	struct timespec ts;
 
 	//Fire cpu net
 	for (num_place = 0; num_place< CPU_NUMBER_PLACES; num_place++) {
@@ -214,11 +218,9 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	}
 
 	// Print transitions and PN while booting and when required
-	if((printed_transitions < transitions_to_print) || !smp_set){
-		printf("\n#& %s Transition OK: %2d - Thread %2d &#", transitions_names[transition_index], transition_index, pt->td_tid);
-		if(printed_transitions < 5) {
-			print_detailed_places();	
-		}
+	if(transitions_to_print){
+    	nanotime(&ts);
+		printf("#& %06ld --- %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", ts.tv_nsec, transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
 		printed_transitions++;
 	}
 }
@@ -302,7 +304,7 @@ void resource_expulse_thread(struct thread *td, int flags) {
 		(td)->td_frominh = 0;
 	}
 	//printf("Resource expulse thread: transition %d\n", transition_number);
-	resource_fire_net(td, transition_number);
+	resource_fire_net("resource_expulse_thread", td, transition_number);
 }
 
 void resource_execute_thread(struct thread *newtd, int cpu) {
@@ -313,7 +315,7 @@ void resource_execute_thread(struct thread *newtd, int cpu) {
 	else
 		transition_number = (cpu * CPU_BASE_TRANSITIONS) + TRAN_EXEC_EMPTY;
 
-	resource_fire_net(newtd, transition_number);
+	resource_fire_net("resource_execute_thread", newtd, transition_number);
 }
 
 void resource_remove_thread(struct thread *newtd, int cpu) {
@@ -324,7 +326,7 @@ void resource_remove_thread(struct thread *newtd, int cpu) {
 	else
 		transition_number = (cpu * CPU_BASE_TRANSITIONS) + TRAN_REMOVE_EMPTY_QUEUE;
 
-	resource_fire_net(newtd, transition_number);
+	resource_fire_net("resource_remove_thread", newtd, transition_number);
 }
 
 void print_resource_net() {
