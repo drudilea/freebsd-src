@@ -23,7 +23,7 @@
 int smp_set = 0;
 int print_counts = 0;
 int printed_transitions = 0;
-int transitions_to_print = 0;
+int transitions_to_print = 1;
 struct petri_cpu_resource_net resource_net;
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
@@ -170,8 +170,6 @@ void resource_fire_net(struct thread *pt, int transition_index)
 
 		if(!smp_set && smp_started) {
 			smp_set = 1;
-			printed_transitions = 0;
-			transitions_to_print = 15;
 			resource_fire_single_transition(pt, TRAN_START_SMP);
 		}
 
@@ -184,9 +182,13 @@ void resource_fire_net(struct thread *pt, int transition_index)
 			}
 		}
 		else {
-			// TODO: Add a kernel panic exit here. We don't care about post error transitions
-			printf("\n!! %s - Non sensitized transition: %2d - Thread %2d !!", transitions_names[transition_index], transition_index, pt->td_tid);
-			print_detailed_places();
+			if(transitions_to_print) {
+				// TODO: Add a kernel panic exit here. We don't care about post error transitions
+				printf("\n!! %s - Non sensitized transition: %2d - Thread %2d !!", transitions_names[transition_index], transition_index, pt->td_tid);
+				print_detailed_places();
+				printf("\n!! %d - Printed transitions", printed_transitions);
+				transitions_to_print = 0;
+			}
 		}
 	}
 
@@ -214,11 +216,8 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	}
 
 	// Print transitions and PN while booting and when required
-	if((printed_transitions < transitions_to_print) || !smp_set){
+	if(transitions_to_print){
 		printf("\n#& %s Transition OK: %2d - Thread %2d &#", transitions_names[transition_index], transition_index, pt->td_tid);
-		if(printed_transitions < 5) {
-			print_detailed_places();	
-		}
 		printed_transitions++;
 	}
 }
