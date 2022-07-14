@@ -12,6 +12,7 @@ const int matrix_Incidence[PLACES_SIZE][TRANSITIONS_SIZE] = {
 };
 
 const int initial_mark[PLACES_SIZE] = { 0, 1, 0, 0, 0 };
+int thread_transitions_to_print = 1;
 
 __inline int
 thread_transition_is_sensitized(struct thread *pt, int transition_index);
@@ -68,9 +69,12 @@ thread_petri_fire(struct thread *pt, int transition)
 	}
 	else
 	{
-		printf("Transition %2d no estaba sensibilizada para thread %d\n", transition, pt->td_tid);
-		thread_print_net(pt);
-		print_resource_net();	
+		if(thread_transitions_to_print) {
+			printf("Transition %2d no estaba sensibilizada para thread %d\n", transition, pt->td_tid);
+			thread_print_net(pt);
+			print_resource_net();
+			thread_transitions_to_print = 0;
+		}
 	}
 }
 
