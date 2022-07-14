@@ -161,7 +161,7 @@ void resource_get_sensitized()
 }
 
 
-void resource_fire_net(struct thread *pt, int transition_index)
+void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 {
 	int i;
 
@@ -301,7 +301,7 @@ void resource_expulse_thread(struct thread *td, int flags) {
 		(td)->td_frominh = 0;
 	}
 	//printf("Resource expulse thread: transition %d\n", transition_number);
-	resource_fire_net(td, transition_number);
+	resource_fire_net("resource_expulse_thread", td, transition_number);
 }
 
 void resource_execute_thread(struct thread *newtd, int cpu) {
@@ -312,7 +312,7 @@ void resource_execute_thread(struct thread *newtd, int cpu) {
 	else
 		transition_number = (cpu * CPU_BASE_TRANSITIONS) + TRAN_EXEC_EMPTY;
 
-	resource_fire_net(newtd, transition_number);
+	resource_fire_net("resource_execute_thread", newtd, transition_number);
 }
 
 void resource_remove_thread(struct thread *newtd, int cpu) {
@@ -323,7 +323,7 @@ void resource_remove_thread(struct thread *newtd, int cpu) {
 	else
 		transition_number = (cpu * CPU_BASE_TRANSITIONS) + TRAN_REMOVE_EMPTY_QUEUE;
 
-	resource_fire_net(newtd, transition_number);
+	resource_fire_net("resource_remove_thread", newtd, transition_number);
 }
 
 void print_resource_net() {
