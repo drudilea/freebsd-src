@@ -217,7 +217,7 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 
 	// Print transitions and PN while booting and when required
 	if(transitions_to_print){
-		printf("\n#& %s Transition OK: %2d - Thread %2d &#", transitions_names[transition_index], transition_index, pt->td_tid);
+		printf("\n#& %2d --- %s Transition OK: %2d - Thread %2d &#", printed_transitions, transitions_names[transition_index], transition_index, pt->td_tid);
 		printed_transitions++;
 	}
 }
@@ -248,6 +248,11 @@ static __inline int transition_is_sensitized(int transition_index)
 			((resource_net.incidence_matrix[places_index][transition_index] + resource_net.mark[places_index]) < 0)) ||
 			is_inhibited(places_index, transition_index))
 		{
+			printf("\n#& places_index: %2d &#", places_index);
+			printf("\n#& transition_index: %2d &#", transition_index);
+			printf("\n#& incidence_matrix[places_index][transition_index] : %2d &#", incidence_matrix[places_index][transition_index]);
+			printf("\n#& resource_net.mark[places_index] : %2d &#", resource_net.mark[places_index]);
+			printf("\n#& is_inhibited : %2d &#", is_inhibited(places_index, transition_index));
 			return 0;
 		}
 	}
