@@ -251,9 +251,10 @@ static __inline int transition_is_sensitized(int transition_index)
 			if(transitions_to_print) {
 				printf("\n#& places_index: %2d &#", places_index);
 				printf("\n#& transition_index: %2d &#", transition_index);
-				printf("\n#& incidence_matrix[places_index][transition_index] : %2d &#", resource_net.incidence_matrix[places_index][transition_index]);
-				printf("\n#& resource_net.mark[places_index] : %2d &#", resource_net.mark[places_index]);
+				printf("\n#& incidence_matrix[places_index][transition_index]: %2d &#", resource_net.incidence_matrix[places_index][transition_index]);
+				printf("\n#& resource_net.mark[places_index]: %2d &#", resource_net.mark[places_index]);
 				printf("\n#& is_inhibited : %2d &#", is_inhibited(places_index, transition_index));
+				transitions_to_print = 0;
 			}
 			return 0;
 		}
