@@ -184,7 +184,7 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 		else {
 			if(transitions_to_print) {
 				// TODO: Add a kernel panic exit here. We don't care about post error transitions
-				printf("\n!! %s - Non sensitized transition: %2d - Thread %2d - FROM %s !!", transitions_names[transition_index], transition_index, pt->td_tid, trigger);
+				printf("\n!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
 				print_detailed_places();
 				printf("\n!! %d - Printed transitions", printed_transitions);
 				transitions_to_print = 0;
