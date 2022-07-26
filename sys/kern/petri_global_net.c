@@ -12,6 +12,7 @@
 #include <sys/param.h>
 #include <sys/cpuset.h>
 #include <sys/smp.h>
+#include <sys/time.h>
 #include <sys/sched_petri.h>
 
 //#include "sched_petri.h"
@@ -204,6 +205,7 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 static void resource_fire_single_transition(struct thread *pt, int transition_index) {
 	int num_place;
 	int local_transition;
+	struct timeval tv;
 
 	//Fire cpu net
 	for (num_place = 0; num_place< CPU_NUMBER_PLACES; num_place++) {
@@ -217,7 +219,8 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 
 	// Print transitions and PN while booting and when required
 	if(transitions_to_print){
-		printf("#& %2d --- %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", printed_transitions, transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
+    	gettimeofday(&tv, NULL);
+		printf("#& %06ld --- %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", tv.tv_usec, transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
 		printed_transitions++;
 	}
 }
