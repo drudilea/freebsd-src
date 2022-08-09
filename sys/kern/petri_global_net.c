@@ -12,6 +12,7 @@
 #include <sys/param.h>
 #include <sys/cpuset.h>
 #include <sys/smp.h>
+#include <sys/time.h>
 #include <sys/sched_petri.h>
 
 //#include "sched_petri.h"
@@ -184,9 +185,9 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 		else {
 			if(transitions_to_print) {
 				// TODO: Add a kernel panic exit here. We don't care about post error transitions
-				printf("\n!! %s - Non sensitized transition: %2d - Thread %2d !!", transitions_names[transition_index], transition_index, pt->td_tid);
+				printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
 				print_detailed_places();
-				printf("\n!! %d - Printed transitions", printed_transitions);
+				printf("!! %d - Printed transitions\n", printed_transitions);
 				transitions_to_print = 0;
 			}
 		}
@@ -204,6 +205,7 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 static void resource_fire_single_transition(struct thread *pt, int transition_index) {
 	int num_place;
 	int local_transition;
+	struct timespec ts;
 
 	//Fire cpu net
 	for (num_place = 0; num_place< CPU_NUMBER_PLACES; num_place++) {
@@ -217,7 +219,8 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 
 	// Print transitions and PN while booting and when required
 	if(transitions_to_print){
-		printf("\n#& %s Transition OK: %2d - Thread %2d &#", transitions_names[transition_index], transition_index, pt->td_tid);
+    	nanotime(&ts);
+		printf("#& %06ld --- %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", ts.tv_nsec, transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
 		printed_transitions++;
 	}
 }
