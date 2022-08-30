@@ -1278,8 +1278,8 @@ sched_pickcpu(struct thread *td)
 
 	transition = resource_choose_cpu(td);
 
-	if (transition == TRAN_QUEUE_GLOBAL)
-		cpu = -1;
+	if (transition == TRAN_QUEUE_GLOBAL || transition == -1)
+		cpu = NOCPU;
 	else
 		cpu = (int)(transition / CPU_BASE_TRANSITIONS);
 
