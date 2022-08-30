@@ -1014,8 +1014,6 @@ sched_switch(struct thread *td, int flags)
 	td->td_owepreempt = 0;
 	td->td_oncpu = NOCPU;
 
-	resource_expulse_thread(td, flags);
-
 	/*
 	 * At the last moment, if this thread is still marked RUNNING,
 	 * then put it back on the run queue as it has not been suspended
@@ -1036,7 +1034,7 @@ sched_switch(struct thread *td, int flags)
 		}
 	}
 
-	/* 
+	/*
 	 * Switch to the sched lock to fix things up and pick
 	 * a new thread.  Block the td_lock in order to avoid
 	 * breaking the critical path.
@@ -1049,6 +1047,8 @@ sched_switch(struct thread *td, int flags)
 
 	if ((td->td_flags & TDF_NOLOAD) == 0)
 		sched_load_rem();
+
+	resource_expulse_thread(td, flags);
 
 	newtd = choosethread();
 	resource_execute_thread(newtd, PCPU_GET(cpuid));
