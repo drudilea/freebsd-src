@@ -222,6 +222,9 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
     	nanotime(&ts);
 		printf("#& %06ld --- %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", ts.tv_nsec, transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
 		printed_transitions++;
+		if(printed_transitions % 15 == 0) {
+			print_detailed_places();
+		}
 	}
 }
 
