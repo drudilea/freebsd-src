@@ -24,7 +24,7 @@
 int smp_set = 0;
 int print_counts = 0;
 int printed_transitions = 0;
-int transitions_to_print = 1;
+int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
