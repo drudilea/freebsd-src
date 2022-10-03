@@ -28,48 +28,52 @@ struct petri_cpu_resource_net resource_net;
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base matrix */
-	{ 1, 0,-1, 0, 0, 0, 0,-1, 0},
-	{ 1,-1, 0, 0, 0, 0, 0,-1,-1},
-	{ 0,-1, 0, 0, 1, 1,-1, 0, 0},
-	{ 0, 1,-1,-1, 0, 0, 1, 0, 0},
-	{ 0, 0, 1, 1,-1,-1, 0, 0, 0}
+	{ 1, 0,-1, 0, 0, 0, 0,-1, 0, 0, 0},
+	{ 1,-1, 0, 0, 0, 0, 0,-1,-1, 0, 0},
+	{ 0,-1, 0, 0, 1, 1,-1, 0, 0, 0, 0},
+	{ 0, 1,-1,-1, 0, 0, 1, 0, 0, 0, 0},
+	{ 0, 0, 1, 1,-1,-1, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1}
 };
 
 const int base_resource_inhibition_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base inhibition matrix */
-	{ 1, 0, 0, 1, 0, 0, 0, 0, 1},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	{ 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0}
 };
 
 const char *transitions_names[] = {
-	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0",
-	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1",
-	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2",
-	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3",
+	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0", "SUSPEND_PROC_P0", "WAKEUP_PROC_P0", 
+	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1", "SUSPEND_PROC_P1", "WAKEUP_PROC_P1",
+	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2", "SUSPEND_PROC_P2", "WAKEUP_PROC_P2",
+	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3", "SUSPEND_PROC_P3", "WAKEUP_PROC_P3",
 	"REMOVE_GLOBAL_QUEUE", "START_SMP", "THROW", "QUEUE_GLOBAL"
 };
 
 const int hierarchical_transitions[] = { TRAN_ADDTOQUEUE, TRAN_EXEC,      TRAN_EXEC_EMPTY, TRAN_RETURN_INVOL, TRAN_RETURN_VOL, TRAN_REMOVE_QUEUE , TRAN_REMOVE_EMPTY_QUEUE, TRAN_QUEUE_GLOBAL, TRAN_REMOVE_GLOBAL_QUEUE };
 const int hierarchical_corresponse[] = { TRAN_ON_QUEUE, TRAN_SET_RUNNING, TRAN_SET_RUNNING, TRAN_SWITCH_OUT, TRAN_TO_WAIT_CHANNEL, TRAN_REMOVE , 	TRAN_REMOVE,   		TRAN_ON_QUEUE , 	TRAN_REMOVE };
 
-/* Extended matrix izq der                GLOBAL TRANSITIONS
-	{ 1, 0,-1, 0, 0, 0, 0,-1, 0},					  	       ,{ 0, 0, 0,-1, 0}
-	{ 1,-1, 0, 0, 0, 0, 0,-1,-1},					           ,{ 0, 0, 0, 0, 0}
-	{ 0,-1, 0, 0, 1, 1,-1, 0, 0},					           ,{ 0, 0, 0, 0, 0}
-	{ 0, 1,-1,-1, 0, 0, 1, 0, 0}					           ,{ 0,-1, 0, 0, 0}
-	{ 0, 0, 1, 1,-1,-1, 0, 0, 0}					           ,{ 0, 0, 0, 0, 0}
-						         { 1, 0,-1, 0, 0, 0, 0,-1, 0}, ,{ 0, 0, 0,-1, 0}
-							     { 1,-1, 0, 0, 0, 0, 0,-1,-1}, ,{ 0, 0, 0, 0, 0}
-							     { 0,-1, 0, 0, 1, 1,-1, 0, 0}, ,{ 0, 0, 0, 0, 0}
-							     { 0, 1,-1,-1, 0, 0, 1, 0, 0}  ,{ 0, 0, 0, 0, 0}
-							     { 0, 0, 1, 1,-1,-1, 0, 0, 0}  ,{ 0, 0, 0, 0, 0}
+/* Extended matrix izq der                									 GLOBAL TRANSITIONS
+	{ 1, 0,-1, 0, 0, 0, 0,-1, 0, 0, 0 },					  	       		 ,{ 0, 0,-1, 0}
+	{ 1,-1, 0, 0, 0, 0, 0,-1,-1, 0, 0 },					           		 ,{ 0, 0, 0, 0}
+	{ 0,-1, 0, 0, 1, 1,-1, 0, 0, 0, 0 },					           		 ,{ 0, 0, 0, 0}
+	{ 0, 1,-1,-1, 0, 0, 1, 0, 0, 0, 0 }					           			 ,{ 0, 0, 0, 0}
+	{ 0, 0, 1, 1,-1,-1, 0, 0, 0, 0, 0 }					           			 ,{ 0, 0, 0, 0}
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1 }					           			 ,{ 0, 0, 0, 0}
+						         		{ 1, 0,-1, 0, 0, 0, 0,-1, 0, 0, 0 }, ,{ 0, 0,-1, 0}
+							     		{ 1,-1, 0, 0, 0, 0, 0,-1,-1, 0, 0 }, ,{ 0, 0, 0, 0}
+							     		{ 0,-1, 0, 0, 1, 1,-1, 0, 0, 0, 0 }, ,{ 0, 0, 0, 0}
+							     		{ 0, 1,-1,-1, 0, 0, 1, 0, 0, 0, 0 }  ,{ 0, 0, 0, 0}
+							     		{ 0, 0, 1, 1,-1,-1, 0, 0, 0, 0, 0 }  ,{ 0, 0, 0, 0}
+							     		{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1 }  ,{ 0, 0, 0, 0}
 	GLOBAL PLACE
-	{ 0, 0, 0, 0, 0, 0,-1, 0, 0} { 0, 0, 0, 0, 0, 0,-1, 0, 0}  ,{-1, 0, 0, 0, 1}
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0} { 0, 0, 0, 0, 0, 0, 0, 0, 0}  ,{ 0, 0,-1, 0, 0}
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0} { 0, 0, 0, 0, 0, 0, 0, 0, 0}  ,{ 0, 0, 1, 0, 0}
+	{ 0, 0, 0, 0, 0, 0,-1, 0, 0, 0, 0 } { 0, 0, 0, 0, 0, 0,-1, 0, 0, 0, 0 }  ,{-1, 0, 0, 1}
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }  ,{ 0,-1, 0, 0}
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }  ,{ 0, 1, 0, 0}
 */
 
 static __inline int transition_is_sensitized(int transition_index);
