@@ -22,8 +22,7 @@
        CPU_ISSET((cpu), &(td)->td_cpuset->cs_mask)
 
 int smp_set = 0;
-int print_counts = 0;
-int printed_transitions = 0;
+int print_enabled = 1;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
 
@@ -183,11 +182,10 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 			}
 		}
 		else {
-			if(transitions_to_print) {
+			if(print_enabled) {
 				// TODO: Add a kernel panic exit here. We don't care about post error transitions
 				printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
 				print_detailed_places();
-				printf("!! %d - Printed transitions\n", printed_transitions);
 				transitions_to_print = 0;
 			}
 		}
@@ -197,8 +195,6 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 		if(resource_net.mark[PLACE_QUEUE + (i*CPU_BASE_PLACES)] <= 5)
 			return;
 	}
-	if((print_counts++ % 1000)== 0)
-		print_uni_label();
 }
 
 
@@ -218,10 +214,10 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	}
 
 	// Print transitions and PN while booting and when required
-	if(transitions_to_print){
+	if (print_enabled && transitions_to_print != 0){
     	nanotime(&ts);
 		printf("#& %06ld --- %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", ts.tv_nsec, transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
-		printed_transitions++;
+		transitions_to_print--;
 	}
 }
 
@@ -371,6 +367,5 @@ void print_detailed_places() {
 }
 
 void set_print_transition(int number_transitions) {
-	printed_transitions = 0;
 	transitions_to_print = number_transitions;
 }
