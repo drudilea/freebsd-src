@@ -381,9 +381,9 @@ void toggle_active_cpu(int cpu) {
 	}
 	if (resource_net.mark[(cpu*CPU_BASE_PLACES) + PLACE_SUSPENDED] == 1){
 		//? TODO: validate if it's ok to send the idle thread as this tr does not have any hierarchical
-		resource_fire_single_transition(PCPU_GET(idlethread), (cpu*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC)
+		resource_fire_single_transition(PCPU_GET(idlethread), (cpu*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC);
 	}
 	else {
-		resource_fire_single_transition(PCPU_GET(idlethread), (cpu*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC)
+		resource_fire_single_transition(PCPU_GET(idlethread), (cpu*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC);
 	}
 }
