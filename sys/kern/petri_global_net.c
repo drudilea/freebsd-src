@@ -47,12 +47,14 @@ const int base_resource_inhibition_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS]
 };
 
 const char *transitions_names[] = {
-	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0", "SUSPEND_PROC_P0", "WAKEUP_PROC_P0", 
+	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0", "SUSPEND_PROC_P0", "WAKEUP_PROC_P0",
 	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1", "SUSPEND_PROC_P1", "WAKEUP_PROC_P1",
 	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2", "SUSPEND_PROC_P2", "WAKEUP_PROC_P2",
 	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3", "SUSPEND_PROC_P3", "WAKEUP_PROC_P3",
 	"REMOVE_GLOBAL_QUEUE", "START_SMP", "THROW", "QUEUE_GLOBAL"
 };
+
+const char *cpu_places_names[] = { "CANTQ", "QUEUE", "CPU", "TOEXEC", "EXECUTING", "SUSPENDED" };
 
 const int hierarchical_transitions[] = { TRAN_ADDTOQUEUE, TRAN_EXEC,      TRAN_EXEC_EMPTY, TRAN_RETURN_INVOL, TRAN_RETURN_VOL, TRAN_REMOVE_QUEUE , TRAN_REMOVE_EMPTY_QUEUE, TRAN_QUEUE_GLOBAL, TRAN_REMOVE_GLOBAL_QUEUE };
 const int hierarchical_corresponse[] = { TRAN_ON_QUEUE, TRAN_SET_RUNNING, TRAN_SET_RUNNING, TRAN_SWITCH_OUT, TRAN_TO_WAIT_CHANNEL, TRAN_REMOVE , 	TRAN_REMOVE,   		TRAN_ON_QUEUE , 	TRAN_REMOVE };
@@ -167,8 +169,6 @@ void resource_get_sensitized()
 
 void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 {
-	int i;
-
 	if(pt) {
 		int automatic_transition;
 
@@ -195,7 +195,7 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 		}
 	}
 
-	for(i=0; i<4; i++){
+	for(int i=0; i<4; i++){
 		if(resource_net.mark[PLACE_QUEUE + (i*CPU_BASE_PLACES)] <= 5)
 			return;
 	}
@@ -359,10 +359,9 @@ void print_cpu_places() {
 }
 
 void print_detailed_places() {
-	const char *cpu_places[] = { "CANTQ", "QUEUE", "CPU", "TOEXEC", "EXECUTING" };
 	for (int i = 0; i < CPU_BASE_PLACES; i++){
 		for (int j = 0; j < CPU_NUMBER; j++){
-			printf("\n#& %d -> %s_P%d &#", resource_net.mark[i + (j*CPU_BASE_PLACES)], cpu_places[i], j);
+			printf("\n#& %d -> %s_P%d &#", resource_net.mark[i + (j*CPU_BASE_PLACES)], cpu_places_names[i], j);
 		}
 	}
 	printf("\n#& %d -> GLOBAL_QUEUE &#", resource_net.mark[PLACE_GLOBAL_QUEUE]);
@@ -381,9 +380,9 @@ void toggle_active_cpu(int cpu) {
 	}
 	if (resource_net.mark[(cpu*CPU_BASE_PLACES) + PLACE_SUSPENDED] == 1){
 		//? TODO: validate if it's ok to send the idle thread as this tr does not have any hierarchical
-		resource_fire_single_transition(PCPU_GET(idlethread), (cpu*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC);
+		resource_fire_net("toggle_active_cpu", PCPU_GET(idlethread), (cpu*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC);
 	}
 	else {
-		resource_fire_single_transition(PCPU_GET(idlethread), (cpu*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC);
+		resource_fire_net("toggle_active_cpu", PCPU_GET(idlethread), (cpu*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC);
 	}
 }
