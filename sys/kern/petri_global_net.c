@@ -23,6 +23,8 @@
 
 int smp_set = 0;
 int print_enabled = 1;
+int toggle_cpu_enabled = 0;
+int cpu_to_suspend = 0;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
 
@@ -108,7 +110,7 @@ void init_resource_net()
 
 		//Set up initial marking
 		if (num_cpu != 0) { //CPU0 starts with no token since it will be the initialization thread who is using it until it returns
-			resource_net.mark[2 + (num_cpu*CPU_BASE_PLACES)] = 1;
+			resource_net.mark[PLACE_CPU + (num_cpu*CPU_BASE_PLACES)] = 1;
 			resource_net.inhibition_matrix[PLACE_SMP_NOT_READY][(num_cpu*CPU_BASE_TRANSITIONS) + TRAN_FROM_GLOBAL_CPU] = 1;
 		}
 
@@ -192,6 +194,16 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 				print_detailed_places();
 				transitions_to_print = 0;
 			}
+		}
+
+		if(toggle_cpu_enabled) {
+			if (resource_net.mark[(cpu_to_suspend*CPU_BASE_PLACES) + PLACE_SUSPENDED] == 1){
+				resource_fire_single_transition(pt, (cpu_to_suspend*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC);
+			}
+			else {
+				resource_fire_single_transition(pt, (cpu_to_suspend*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC);
+			}
+			toggle_cpu_enabled = 0;
 		}
 	}
 
@@ -378,11 +390,7 @@ void toggle_active_cpu(int cpu) {
 		printf("toggle_active_cpu exception - CPU %d does not exist\n", cpu);
 		return;
 	}
-	if (resource_net.mark[(cpu*CPU_BASE_PLACES) + PLACE_SUSPENDED] == 1){
-		//? TODO: validate if it's ok to send the idle thread as this tr does not have any hierarchical
-		resource_fire_net("toggle_active_cpu", PCPU_GET(idlethread), (cpu*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC);
-	}
-	else {
-		resource_fire_net("toggle_active_cpu", PCPU_GET(idlethread), (cpu*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC);
-	}
+	cpu_to_suspend = cpu;
+	toggle_cpu_enabled = 1;
+	return;
 }
