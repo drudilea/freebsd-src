@@ -171,6 +171,7 @@ void resource_get_sensitized()
 
 void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 {
+	printf("!! %s - Transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
 	if(pt) {
 		int automatic_transition;
 
