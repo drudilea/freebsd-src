@@ -386,6 +386,8 @@ void set_print_transition(int number_transitions) {
 }
 
 void toggle_active_cpu(int cpu) {
+	printf("TOGGLE ACTIVE/INACTIVE CPU: CPU %d\n", cpu);
+	print_detailed_places();
 	if (cpu >= CPU_NUMBER) {
 		printf("toggle_active_cpu exception - CPU %d does not exist\n", cpu);
 		return;
