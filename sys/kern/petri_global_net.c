@@ -171,7 +171,6 @@ void resource_get_sensitized()
 
 void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 {
-	printf("!! %s - Transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
 	if(pt) {
 		int automatic_transition;
 
@@ -389,6 +388,7 @@ void set_print_transition(int number_transitions) {
 void toggle_active_cpu(int cpu) {
 	printf("TOGGLE ACTIVE/INACTIVE CPU: CPU %d\n", cpu);
 	print_detailed_places();
+	set_print_transition(5000);
 	if (cpu >= CPU_NUMBER) {
 		printf("toggle_active_cpu exception - CPU %d does not exist\n", cpu);
 		return;
