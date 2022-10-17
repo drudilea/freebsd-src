@@ -57,6 +57,8 @@ void thread_get_sensitized(struct thread *pt);
 __inline int thread_transition_is_sensitized(struct thread *pt, int transition_index);
 void thread_petri_fire(struct thread *pt, int transition);
 void thread_print_net(struct thread *pt);
+void thread_print_detailed_places(struct thread *pt);
+
 
 //Petri Global Methods
 void init_resource_net(void);

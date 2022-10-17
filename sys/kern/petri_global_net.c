@@ -53,8 +53,33 @@ const char *transitions_names[] = {
 	"REMOVE_GLOBAL_QUEUE", "START_SMP", "THROW", "QUEUE_GLOBAL"
 };
 
-const int hierarchical_transitions[] = { TRAN_ADDTOQUEUE, TRAN_EXEC,      TRAN_EXEC_EMPTY, TRAN_RETURN_INVOL, TRAN_RETURN_VOL, TRAN_REMOVE_QUEUE , TRAN_REMOVE_EMPTY_QUEUE, TRAN_QUEUE_GLOBAL, TRAN_REMOVE_GLOBAL_QUEUE };
-const int hierarchical_corresponse[] = { TRAN_ON_QUEUE, TRAN_SET_RUNNING, TRAN_SET_RUNNING, TRAN_SWITCH_OUT, TRAN_TO_WAIT_CHANNEL, TRAN_REMOVE , 	TRAN_REMOVE,   		TRAN_ON_QUEUE , 	TRAN_REMOVE };
+const char *thread_transitions[] = {
+	"TRAN_INIT", "TRAN_ON_QUEUE", "TRAN_SET_RUNNING", "TRAN_SWITCH_OUT", "TRAN_TO_WAIT_CHANNEL", "TRAN_WAKEUP", "TRAN_REMOVE"
+};
+
+const int hierarchical_transitions[] = { 
+	TRAN_ADDTOQUEUE,
+	TRAN_EXEC,
+	TRAN_EXEC_EMPTY,
+	TRAN_RETURN_INVOL,
+	TRAN_RETURN_VOL,
+	TRAN_REMOVE_QUEUE,
+	TRAN_REMOVE_EMPTY_QUEUE,
+	TRAN_QUEUE_GLOBAL,
+	TRAN_REMOVE_GLOBAL_QUEUE
+};
+
+const int hierarchical_corresponse[] = { 
+	TRAN_ON_QUEUE,
+	TRAN_SET_RUNNING,
+	TRAN_SET_RUNNING,
+	TRAN_SWITCH_OUT,
+	TRAN_TO_WAIT_CHANNEL,
+	TRAN_REMOVE,
+	TRAN_REMOVE,
+	TRAN_ON_QUEUE,
+	TRAN_REMOVE
+};
 
 /* Extended matrix izq der                GLOBAL TRANSITIONS
 	{ 1, 0,-1, 0, 0, 0, 0,-1, 0},					  	       ,{ 0, 0, 0,-1, 0}
@@ -175,6 +200,7 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 		}
 
 		if(transition_is_sensitized(transition_index)) {
+			printf("!! FIRE RESOURCE TRANSITION: %s - Trigger: %s - Thread %2d - CPU %2d !!\n", transitions_names[transition_index], trigger, pt->td_tid, PCPU_GET(cpuid));
 			resource_fire_single_transition(pt, transition_index);
 			automatic_transition = get_automatic_transitions_sensitized();
 			while (automatic_transition != -1) {
@@ -185,9 +211,9 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 		else {
 			if(transitions_to_print) {
 				// TODO: Add a kernel panic exit here. We don't care about post error transitions
-				printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
-				print_detailed_places();
-				printf("!! %d - Printed transitions\n", printed_transitions);
+				// printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
+				// print_detailed_places();
+				// printf("!! %d - Printed transitions\n", printed_transitions);
 				transitions_to_print = 0;
 			}
 		}
@@ -214,7 +240,12 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	local_transition = is_hierarchical(transition_index);
 	if (local_transition) {
 		//If we need to fire a local thread transition we fire it here
+		// printf("!!!! FIRING LOCAL TRANSITION: %s -- FROM %s -- Thread %2d !!!!\n", thread_transitions[local_transition], transitions_names[transition_index], pt->td_tid);
+		printf("!!!! FIRING LOCAL TRANSITION: %s -- FROM %s -- Thread %2d !!!!\n", thread_transitions[local_transition], transitions_names[transition_index], pt->td_tid);
 		thread_petri_fire(pt, local_transition);
+	} 
+	else {
+		// printf("!!!! NO LOCAL TRANSITION FOUND : -- FROM %s -- Thread %2d !!!!\n", transitions_names[transition_index], pt->td_tid);
 	}
 
 	// Print transitions and PN while booting and when required
