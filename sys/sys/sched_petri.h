@@ -37,7 +37,7 @@
 
 
 //Global transition
-#define TRAN_REMOVE_GLOBAL_QUEUE (CPU_NUMBER_TRANSITION-4) 
+#define TRAN_REMOVE_GLOBAL_QUEUE (CPU_NUMBER_TRANSITION-4)
 #define TRAN_START_SMP (CPU_NUMBER_TRANSITION-3)
 #define TRAN_THROW (CPU_NUMBER_TRANSITION-2)
 #define TRAN_QUEUE_GLOBAL (CPU_NUMBER_TRANSITION-1)
@@ -57,6 +57,7 @@ void thread_get_sensitized(struct thread *pt);
 __inline int thread_transition_is_sensitized(struct thread *pt, int transition_index);
 void thread_petri_fire(struct thread *pt, int transition);
 void thread_print_net(struct thread *pt);
+int get_thread_state(struct thread *pt);
 
 //Petri Global Methods
 void init_resource_net(void);
