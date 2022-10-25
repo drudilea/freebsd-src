@@ -1143,7 +1143,7 @@ sched_wakeup(struct thread *td, int srqflags)
 	ts->ts_slptime = 0;
 	ts->ts_slice = sched_slice;
 	sched_add(td, srqflags);
-	//thread_petri_fire(td, TRAN_WAKEUP);
+	//thread_petri_fire("sched_wakeup STRAIGHT_CALL", td, TRAN_WAKEUP);
 }
 
 #ifdef SMP
@@ -1292,7 +1292,7 @@ sched_add(struct thread *td, int flags)
 #ifdef SMP
 {
 	if(td && ((td)->td_frominh == 1)) {
-		thread_petri_fire(td, TRAN_WAKEUP);
+		thread_petri_fire("sched_add STRAIGHT_CALL", td, TRAN_WAKEUP);
 		td->td_frominh = 0;
 	}
 	
@@ -1509,7 +1509,7 @@ sched_choose(void)
 		return (td);
 	}
 	if(PCPU_GET(idlethread)->td_frominh == 1) {
-		thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
+		thread_petri_fire("sched_choose STRAIGHT_CALL", PCPU_GET(idlethread), TRAN_WAKEUP);
 		PCPU_GET(idlethread)->td_frominh = 0;
 	}
 	resource_fire_net("sched_choose", PCPU_GET(idlethread), TRAN_QUEUE_GLOBAL);

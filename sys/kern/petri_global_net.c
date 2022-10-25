@@ -74,7 +74,7 @@ const int hierarchical_corresponse[] = { TRAN_ON_QUEUE, TRAN_SET_RUNNING, TRAN_S
 */
 
 static __inline int transition_is_sensitized(int transition_index);
-static void resource_fire_single_transition(struct thread *pt, int transition_index);
+static void resource_fire_single_transition(char *trigger, struct thread *pt, int transition_index);
 static int get_automatic_transitions_sensitized(void);
 
 void init_resource_net()
@@ -171,14 +171,14 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 
 		if(!smp_set && smp_started) {
 			smp_set = 1;
-			resource_fire_single_transition(pt, TRAN_START_SMP);
+			resource_fire_single_transition(trigger, pt, TRAN_START_SMP);
 		}
 
 		if(transition_is_sensitized(transition_index)) {
-			resource_fire_single_transition(pt, transition_index);
+			resource_fire_single_transition(trigger, pt, transition_index);
 			automatic_transition = get_automatic_transitions_sensitized();
 			while (automatic_transition != -1) {
-				resource_fire_single_transition(pt, automatic_transition);
+				resource_fire_single_transition(trigger, pt, automatic_transition);
 				automatic_transition = get_automatic_transitions_sensitized();
 			}
 		}
@@ -202,10 +202,15 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 }
 
 
-static void resource_fire_single_transition(struct thread *pt, int transition_index) {
+static void resource_fire_single_transition(char *trigger, struct thread *pt, int transition_index) {
 	int num_place;
 	int local_transition;
 	struct timespec ts;
+
+	char trigger_transition[40];
+	strcpy(trigger_transition, trigger);
+	strcat(trigger_transition, " ");
+	strcat(trigger_transition, transitions_names[transition_index]);
 
 	//Fire cpu net
 	for (num_place = 0; num_place< CPU_NUMBER_PLACES; num_place++) {
@@ -214,7 +219,7 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	local_transition = is_hierarchical(transition_index);
 	if (local_transition) {
 		//If we need to fire a local thread transition we fire it here
-		thread_petri_fire(pt, local_transition);
+		thread_petri_fire(trigger_transition, pt, local_transition);
 	}
 
 	// Print transitions and PN while booting and when required

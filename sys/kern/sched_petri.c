@@ -20,7 +20,6 @@ const char *thread_transitions_names[] = {
 const char *thread_places[] = {
 	"INACTIVE", "CAN_RUN", "RUNQ", "RUNNING", "INHIBITED",
 };
-
 const char *td_state_to_string[] = {
 	"INACTIVE", "INHIBITED", "CAN_RUN", "RUNQ", "RUNNING",
 };
@@ -72,7 +71,7 @@ thread_transition_is_sensitized(struct thread *pt, int transition_index)
 }
 
 void
-thread_petri_fire(struct thread *pt, int transition)
+thread_petri_fire(char *trigger, struct thread *pt, int transition)
 {
 	int i;
 	if(thread_transition_is_sensitized(pt, transition)){
@@ -92,7 +91,7 @@ thread_petri_fire(struct thread *pt, int transition)
 			thread_state = i;
 	}
 
-	printf("!! Thread %d - NetState-> %s - RealState-> %s !!\n", pt->td_tid, thread_places[thread_state], td_state_to_string[pt->td_state]);
+	printf("!! Thread %d - NetState-> %s - RealState-> %s - Trigger %s !!\n", pt->td_tid, thread_places[thread_state], td_state_to_string[pt->td_state], trigger);
 }
 
 
@@ -106,7 +105,7 @@ thread_search_and_fire(struct thread *pt){
 		i++;
 	}
 	if(i < TRANSITIONS_SIZE){
-		thread_petri_fire(pt, i);
+		thread_petri_fire("thread_search_and_fire", pt, i);
 	}
 }
 
