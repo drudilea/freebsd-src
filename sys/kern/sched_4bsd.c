@@ -1016,6 +1016,22 @@ sched_switch(struct thread *td, int flags)
 	td->td_oncpu = NOCPU;
 
 	/*
+	 * Switch to the sched lock to fix things up and pick
+	 * a new thread.  Block the td_lock in order to avoid
+	 * breaking the critical path.
+	 */
+	if (td->td_lock != &sched_lock) {
+		mtx_lock_spin(&sched_lock);
+		tmtx = thread_lock_block(td);
+		mtx_unlock_spin(tmtx);
+	}
+
+	if ((td->td_flags & TDF_NOLOAD) == 0)
+		sched_load_rem();
+
+	resource_expulse_thread(td, flags);
+
+	/*
 	 * At the last moment, if this thread is still marked RUNNING,
 	 * then put it back on the run queue as it has not been suspended
 	 * or stopped or any thing else similar.  We never put the idle
@@ -1035,22 +1051,6 @@ sched_switch(struct thread *td, int flags)
 			    SRQ_HOLDTD|SRQ_OURSELF|SRQ_YIELDING);
 		}
 	}
-
-	/*
-	 * Switch to the sched lock to fix things up and pick
-	 * a new thread.  Block the td_lock in order to avoid
-	 * breaking the critical path.
-	 */
-	if (td->td_lock != &sched_lock) {
-		mtx_lock_spin(&sched_lock);
-		tmtx = thread_lock_block(td);
-		mtx_unlock_spin(tmtx);
-	}
-
-	if ((td->td_flags & TDF_NOLOAD) == 0)
-		sched_load_rem();
-
-	resource_expulse_thread(td, flags);
 
 	newtd = choosethread();
 	resource_execute_thread(newtd, PCPU_GET(cpuid));
