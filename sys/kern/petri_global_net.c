@@ -22,8 +22,7 @@
        CPU_ISSET((cpu), &(td)->td_cpuset->cs_mask)
 
 int smp_set = 0;
-int print_counts = 0;
-int printed_transitions = 0;
+int print_enabled = 1;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
 
@@ -53,9 +52,7 @@ const char *transitions_names[] = {
 	"REMOVE_GLOBAL_QUEUE", "START_SMP", "THROW", "QUEUE_GLOBAL"
 };
 
-const char *thread_transitions[] = {
-	"TRAN_INIT", "TRAN_ON_QUEUE", "TRAN_SET_RUNNING", "TRAN_SWITCH_OUT", "TRAN_TO_WAIT_CHANNEL", "TRAN_WAKEUP", "TRAN_REMOVE"
-};
+const char *cpu_places_names[] = { "CANTQ", "QUEUE", "CPU", "TOEXEC", "EXECUTING", "SUSPENDED" };
 
 const int hierarchical_transitions[] = { 
 	TRAN_ADDTOQUEUE,
@@ -128,7 +125,7 @@ void init_resource_net()
 
 		//Set up initial marking
 		if (num_cpu != 0) { //CPU0 starts with no token since it will be the initialization thread who is using it until it returns
-			resource_net.mark[2 + (num_cpu*CPU_BASE_PLACES)] = 1;
+			resource_net.mark[PLACE_CPU + (num_cpu*CPU_BASE_PLACES)] = 1;
 			resource_net.inhibition_matrix[PLACE_SMP_NOT_READY][(num_cpu*CPU_BASE_TRANSITIONS) + TRAN_FROM_GLOBAL_CPU] = 1;
 		}
 
@@ -189,8 +186,6 @@ void resource_get_sensitized()
 
 void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 {
-	int i;
-
 	if(pt) {
 		int automatic_transition;
 
@@ -200,7 +195,6 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 		}
 
 		if(transition_is_sensitized(transition_index)) {
-			printf("!! FIRE RESOURCE TRANSITION: %s - Trigger: %s - Thread %2d - CPU %2d !!\n", transitions_names[transition_index], trigger, pt->td_tid, PCPU_GET(cpuid));
 			resource_fire_single_transition(pt, transition_index);
 			automatic_transition = get_automatic_transitions_sensitized();
 			while (automatic_transition != -1) {
@@ -209,22 +203,19 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 			}
 		}
 		else {
-			if(transitions_to_print) {
+			if(print_enabled) {
 				// TODO: Add a kernel panic exit here. We don't care about post error transitions
-				// printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
-				// print_detailed_places();
-				// printf("!! %d - Printed transitions\n", printed_transitions);
+				printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
+				print_detailed_places();
 				transitions_to_print = 0;
 			}
 		}
 	}
 
-	for(i=0; i<4; i++){
+	for(int i=0; i<4; i++){
 		if(resource_net.mark[PLACE_QUEUE + (i*CPU_BASE_PLACES)] <= 5)
 			return;
 	}
-	if((print_counts++ % 1000)== 0)
-		print_uni_label();
 }
 
 
@@ -240,19 +231,13 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	local_transition = is_hierarchical(transition_index);
 	if (local_transition) {
 		//If we need to fire a local thread transition we fire it here
-		// printf("!!!! FIRING LOCAL TRANSITION: %s -- FROM %s -- Thread %2d !!!!\n", thread_transitions[local_transition], transitions_names[transition_index], pt->td_tid);
-		printf("!!!! FIRING LOCAL TRANSITION: %s -- FROM %s -- Thread %2d !!!!\n", thread_transitions[local_transition], transitions_names[transition_index], pt->td_tid);
 		thread_petri_fire(pt, local_transition);
-	} 
-	else {
-		// printf("!!!! NO LOCAL TRANSITION FOUND : -- FROM %s -- Thread %2d !!!!\n", transitions_names[transition_index], pt->td_tid);
 	}
 
-	// Print transitions and PN while booting and when required
-	if(transitions_to_print){
+	if (print_enabled && transitions_to_print != 0){
     	nanotime(&ts);
 		printf("#& %06ld --- %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", ts.tv_nsec, transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
-		printed_transitions++;
+		transitions_to_print--;
 	}
 }
 
@@ -319,7 +304,6 @@ int resource_choose_cpu(struct thread* td)
 	}
 
 	KASSERT(cpu_available == NOCPU, ("no valid CPUs"));
-	//printf("Resource choose cpu: transition %d\n", cpu_available);
 	return cpu_available;
 }
 
@@ -334,7 +318,6 @@ void resource_expulse_thread(struct thread *td, int flags) {
 		transition_number = (td->td_lastcpu * CPU_BASE_TRANSITIONS) + TRAN_RETURN_INVOL;
 		(td)->td_frominh = 0;
 	}
-	//printf("Resource expulse thread: transition %d\n", transition_number);
 	resource_fire_net("resource_expulse_thread", td, transition_number);
 }
 
@@ -390,10 +373,9 @@ void print_cpu_places() {
 }
 
 void print_detailed_places() {
-	const char *cpu_places[] = { "CANTQ", "QUEUE", "CPU", "TOEXEC", "EXECUTING" };
 	for (int i = 0; i < CPU_BASE_PLACES; i++){
 		for (int j = 0; j < CPU_NUMBER; j++){
-			printf("\n#& %d -> %s_P%d &#", resource_net.mark[i + (j*CPU_BASE_PLACES)], cpu_places[i], j);
+			printf("\n#& %d -> %s_P%d &#", resource_net.mark[i + (j*CPU_BASE_PLACES)], cpu_places_names[i], j);
 		}
 	}
 	printf("\n#& %d -> GLOBAL_QUEUE &#", resource_net.mark[PLACE_GLOBAL_QUEUE]);
@@ -402,6 +384,5 @@ void print_detailed_places() {
 }
 
 void set_print_transition(int number_transitions) {
-	printed_transitions = 0;
 	transitions_to_print = number_transitions;
 }
