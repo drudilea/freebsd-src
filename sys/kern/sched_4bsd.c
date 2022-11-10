@@ -866,7 +866,6 @@ sched_priority(struct thread *td, u_char prio)
 	td->td_priority = prio;
 	if (TD_ON_RUNQ(td) && td->td_rqindex != (prio / RQ_PPQ)) {
 		sched_rem(td);
-		printf("!! Calling sched_add from sched_priority - Thread %2d !!\n", td->td_tid);
 		sched_add(td, SRQ_BORING | SRQ_HOLDTD);
 	}
 }
@@ -1045,7 +1044,6 @@ sched_switch(struct thread *td, int flags)
 	} else {
 		if (TD_IS_RUNNING(td)) {
 			/* Put us back on the run queue. */
-			printf("!! Calling sched_add from sched_switch - Thread %2d !!\n", td->td_tid);
 			sched_add(td, preempted ?
 			    SRQ_HOLDTD|SRQ_OURSELF|SRQ_YIELDING|SRQ_PREEMPTED :
 			    SRQ_HOLDTD|SRQ_OURSELF|SRQ_YIELDING);
@@ -1144,7 +1142,6 @@ sched_wakeup(struct thread *td, int srqflags)
 	td->td_slptick = 0;
 	ts->ts_slptime = 0;
 	ts->ts_slice = sched_slice;
-	printf("!! Calling sched_add from sched_wakeup - Thread %2d !!\n", td->td_tid);
 	sched_add(td, srqflags);
 	//thread_petri_fire(td, TRAN_WAKEUP);
 }
@@ -1803,7 +1800,6 @@ sched_affinity(struct thread *td)
 
 		/* Put this thread on a valid per-CPU runqueue. */
 		sched_rem(td);
-		printf("!! Calling sched_add from sched_affinity - Thread %2d !!\n", td->td_tid);
 		sched_add(td, SRQ_HOLDTD | SRQ_BORING);
 		break;
 	case TDS_RUNNING:
