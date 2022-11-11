@@ -398,7 +398,7 @@ void toggle_active_cpu(int cpu) {
 	print_detailed_places();
 	set_print_transition(500);
 	int tran_wakeup_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC;
-	int tran_suspend_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC);
+	int tran_suspend_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC;
 
 	if (transition_is_sensitized(tran_wakeup_index)){
 		resource_fire_net("toggle_active: wakeup", curthread, tran_wakeup_index);
