@@ -394,7 +394,7 @@ void toggle_active_cpu(int cpu) {
 		printf("toggle_active_cpu exception - CPU %d does not exist\n", cpu);
 		return;
 	}
-	printf("TOGGLE ACTIVE/INACTIVE: CPU %d - Thread %2d\n", cpu, curthread);
+	printf("TOGGLE ACTIVE/INACTIVE: CPU %d - Thread %2d\n", cpu, curthread->td_tid);
 	print_detailed_places();
 	set_print_transition(500);
 	int tran_wakeup_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC;
