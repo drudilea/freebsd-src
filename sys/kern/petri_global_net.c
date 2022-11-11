@@ -23,8 +23,6 @@
 
 int smp_set = 0;
 int print_enabled = 1;
-int toggle_cpu_enabled = 0;
-int cpu_to_suspend = 0;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
 
@@ -216,16 +214,6 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 				transitions_to_print = 0;
 			}
 		}
-
-		if(toggle_cpu_enabled) {
-			if (resource_net.mark[(cpu_to_suspend*CPU_BASE_PLACES) + PLACE_SUSPENDED] == 1){
-				resource_fire_single_transition(pt, (cpu_to_suspend*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC);
-			}
-			else {
-				resource_fire_single_transition(pt, (cpu_to_suspend*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC);
-			}
-			toggle_cpu_enabled = 0;
-		}
 	}
 
 	for(int i=0; i<4; i++){
@@ -238,7 +226,6 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 static void resource_fire_single_transition(struct thread *pt, int transition_index) {
 	int num_place;
 	int local_transition;
-	struct timespec ts;
 
 	//Fire cpu net
 	for (num_place = 0; num_place< CPU_NUMBER_PLACES; num_place++) {
@@ -251,8 +238,7 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	}
 
 	if (print_enabled && transitions_to_print != 0){
-    	nanotime(&ts);
-		printf("#& %06ld --- %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", ts.tv_nsec, transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
+		printf("#& %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
 		transitions_to_print--;
 	}
 }
@@ -404,14 +390,20 @@ void set_print_transition(int number_transitions) {
 }
 
 void toggle_active_cpu(int cpu) {
-	printf("TOGGLE ACTIVE/INACTIVE CPU: CPU %d\n", cpu);
-	print_detailed_places();
-	set_print_transition(5000);
 	if (cpu >= CPU_NUMBER) {
 		printf("toggle_active_cpu exception - CPU %d does not exist\n", cpu);
 		return;
 	}
-	cpu_to_suspend = cpu;
-	toggle_cpu_enabled = 1;
-	return;
+	printf("TOGGLE ACTIVE/INACTIVE: CPU %d - Thread %2d\n", cpu, curthread);
+	print_detailed_places();
+	set_print_transition(500);
+	int tran_wakeup_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC;
+	int tran_suspend_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC);
+
+	if (transition_is_sensitized(tran_wakeup_index)){
+		resource_fire_net("toggle_active: wakeup", curthread, tran_wakeup_index);
+	}
+	else {
+		resource_fire_net("toggle_active: suspend", curthread, tran_suspend_index);
+	}
 }
