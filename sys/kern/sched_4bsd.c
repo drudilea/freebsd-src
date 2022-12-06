@@ -1512,7 +1512,7 @@ sched_choose(void)
 		thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
 		PCPU_GET(idlethread)->td_frominh = 0;
 	}
-	resource_fire_net("sched_choose_3", PCPU_GET(idlethread), TRAN_EXEC_IDLE);
+	resource_fire_net("sched_choose_3", PCPU_GET(idlethread), TRAN_EXEC_IDLE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 	return (PCPU_GET(idlethread));
 }
 
