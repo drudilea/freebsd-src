@@ -189,6 +189,10 @@ void resource_get_sensitized()
 	}
 }
 
+int get_place_tokens_qty(int place_index)
+{
+	return resource_net.mark[place_index];
+}
 
 void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 {

@@ -76,5 +76,6 @@ void print_cpu_places(void);
 void print_detailed_places(void);
 void set_print_transition(int transitions_to_print);
 void toggle_active_cpu(int cpu);
+int get_place_tokens_qty(int place_index);
 
 #endif
