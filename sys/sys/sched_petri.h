@@ -7,7 +7,7 @@
 #define CPU_NUMBER 4
 // FOR GLOBAL TRANISTIONS
 #define CPU_BASE_PLACES 6
-#define CPU_BASE_TRANSITIONS 11
+#define CPU_BASE_TRANSITIONS 12
 #define CPU_NUMBER_PLACES (CPU_BASE_PLACES*CPU_NUMBER)+3
 #define CPU_NUMBER_TRANSITION (CPU_BASE_TRANSITIONS*CPU_NUMBER)+4
 /* Definitions of transition and places for the CPU resource net */
@@ -29,13 +29,14 @@
 #define TRAN_UNQUEUE 1
 #define TRAN_EXEC 2
 #define TRAN_EXEC_EMPTY 3
-#define TRAN_RETURN_VOL 4
-#define TRAN_RETURN_INVOL 5
-#define TRAN_FROM_GLOBAL_CPU 6
-#define TRAN_REMOVE_QUEUE 7
-#define TRAN_REMOVE_EMPTY_QUEUE 8
-#define TRAN_SUSPEND_PROC 9
-#define TRAN_WAKEUP_PROC 10
+#define TRAN_EXEC_IDLE 4
+#define TRAN_RETURN_VOL 5
+#define TRAN_RETURN_INVOL 6
+#define TRAN_FROM_GLOBAL_CPU 7
+#define TRAN_REMOVE_QUEUE 8
+#define TRAN_REMOVE_EMPTY_QUEUE 9
+#define TRAN_SUSPEND_PROC 10
+#define TRAN_WAKEUP_PROC 11
 
 //Global transition
 #define TRAN_REMOVE_GLOBAL_QUEUE (CPU_NUMBER_TRANSITION-4) 
@@ -57,7 +58,6 @@ void init_petri_thread(struct thread *pt_thread);
 void thread_get_sensitized(struct thread *pt);
 __inline int thread_transition_is_sensitized(struct thread *pt, int transition_index);
 void thread_petri_fire(struct thread *pt, int transition);
-void thread_print_net(struct thread *pt);
 void thread_print_detailed_places(struct thread *pt);
 
 
@@ -69,11 +69,9 @@ int resource_choose_cpu(struct thread *td);
 void resource_expulse_thread(struct thread *td, int flags);
 void resource_execute_thread(struct thread *newtd, int cpu);
 void resource_remove_thread(struct thread *newtd, int cpu);
-void print_resource_net(void);
-void print_uni_label(void);
-void print_cpu_places(void);
 void print_detailed_places(void);
 void set_print_transition(int transitions_to_print);
 void toggle_active_cpu(int cpu);
+int get_place_tokens_qty(int place_index);
 
 #endif

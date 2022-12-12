@@ -70,6 +70,12 @@ thread_transition_is_sensitized(struct thread *pt, int transition_index)
 
 }
 
+void thread_print_detailed_places(struct thread *pt) {
+	for (int i = 0; i < PLACES_SIZE; i++){
+		printf("#& %d -> %s &#\n", pt->mark[i], thread_places[i]);
+	}
+}
+
 void
 thread_petri_fire(struct thread *pt, int transition)
 {
@@ -99,17 +105,4 @@ thread_search_and_fire(struct thread *pt){
 	}
 }
 
-void thread_print_net(struct thread *pt)
-{
-	int i;
-	printf("Marcado thread %d: ", pt->td_tid);
-	for(i=0; i< PLACES_SIZE; i++){
-		printf("%d ", pt->mark[i]);
-	}
-}
 
-void thread_print_detailed_places(struct thread *pt) {
-	for (int i = 0; i < PLACES_SIZE; i++){
-		printf("#& %d -> %s &#\n", pt->mark[i], thread_places[i]);
-	}
-}

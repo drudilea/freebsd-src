@@ -1,8 +1,8 @@
 /*
  ============================================================================
- Name        : PetriGlobalNet.c
- Author      :
- Version     :
+ Name        : petri_global_net.c
+ Author      : Drudi (@drudilea), Goldman (@nicolasgoldman07)
+ Version     : 1.0
  Copyright   : Your copyright notice
  Description : Hello World in C, Ansi-style
  ============================================================================
@@ -23,36 +23,34 @@
 
 int smp_set = 0;
 int print_enabled = 1;
-int toggle_cpu_enabled = 0;
-int cpu_to_suspend = 0;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base matrix */
-	{ 1, 0,-1, 0, 0, 0, 0,-1, 0, 0, 0},
-	{ 1,-1, 0, 0, 0, 0, 0,-1,-1, 0, 0},
-	{ 0,-1, 0, 0, 1, 1,-1, 0, 0, 0, 0},
-	{ 0, 1,-1,-1, 0, 0, 1, 0, 0, 0, 0},
-	{ 0, 0, 1, 1,-1,-1, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1}
+	{ 1, 0,-1, 0, 0, 0, 0, 0,-1, 0, 0, 0},
+	{ 1,-1, 0, 0, 0, 0, 0, 0,-1,-1, 0, 0},
+	{ 0,-1, 0, 0,-1, 1, 1,-1, 0, 0, 0, 0},
+	{ 0, 1,-1,-1, 1, 0, 0, 1, 0, 0, 0, 0},
+	{ 0, 0, 1, 1, 0,-1,-1, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1}
 };
 
 const int base_resource_inhibition_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base inhibition matrix */
-	{ 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0}
+	{ 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0},
+	{ 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0}
 };
 
 const char *transitions_names[] = {
-	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0", "SUSPEND_PROC_P0", "WAKEUP_PROC_P0",
-	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1", "SUSPEND_PROC_P1", "WAKEUP_PROC_P1",
-	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2", "SUSPEND_PROC_P2", "WAKEUP_PROC_P2",
-	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3", "SUSPEND_PROC_P3", "WAKEUP_PROC_P3",
+	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "EXEC_IDLE_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0", "SUSPEND_PROC_P0", "WAKEUP_PROC_P0",
+	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "EXEC_IDLE_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1", "SUSPEND_PROC_P1", "WAKEUP_PROC_P1",
+	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "EXEC_IDLE_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2", "SUSPEND_PROC_P2", "WAKEUP_PROC_P2",
+	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "EXEC_IDLE_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3", "SUSPEND_PROC_P3", "WAKEUP_PROC_P3",
 	"REMOVE_GLOBAL_QUEUE", "START_SMP", "THROW", "QUEUE_GLOBAL"
 };
 
@@ -62,6 +60,7 @@ const int hierarchical_transitions[] = {
 	TRAN_ADDTOQUEUE,
 	TRAN_EXEC,
 	TRAN_EXEC_EMPTY,
+	TRAN_EXEC_IDLE,
 	TRAN_RETURN_INVOL,
 	TRAN_RETURN_VOL,
 	TRAN_REMOVE_QUEUE ,
@@ -74,6 +73,7 @@ const int hierarchical_corresponse[] = {
 	TRAN_ON_QUEUE,
 	TRAN_SET_RUNNING,
 	TRAN_SET_RUNNING,
+	TRAN_ON_QUEUE,
 	TRAN_SWITCH_OUT,
 	TRAN_TO_WAIT_CHANNEL,
 	TRAN_REMOVE,
@@ -82,23 +82,23 @@ const int hierarchical_corresponse[] = {
 	TRAN_REMOVE
 };
 
-/* Extended matrix izq der                									 GLOBAL TRANSITIONS
-	{ 1, 0,-1, 0, 0, 0, 0,-1, 0, 0, 0 },					  	       		 ,{ 0, 0,-1, 0}
-	{ 1,-1, 0, 0, 0, 0, 0,-1,-1, 0, 0 },					           		 ,{ 0, 0, 0, 0}
-	{ 0,-1, 0, 0, 1, 1,-1, 0, 0, 0, 0 },					           		 ,{ 0, 0, 0, 0}
-	{ 0, 1,-1,-1, 0, 0, 1, 0, 0, 0, 0 }					           			 ,{ 0, 0, 0, 0}
-	{ 0, 0, 1, 1,-1,-1, 0, 0, 0, 0, 0 }					           			 ,{ 0, 0, 0, 0}
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1 }					           			 ,{ 0, 0, 0, 0}
-						         		{ 1, 0,-1, 0, 0, 0, 0,-1, 0, 0, 0 }, ,{ 0, 0,-1, 0}
-							     		{ 1,-1, 0, 0, 0, 0, 0,-1,-1, 0, 0 }, ,{ 0, 0, 0, 0}
-							     		{ 0,-1, 0, 0, 1, 1,-1, 0, 0, 0, 0 }, ,{ 0, 0, 0, 0}
-							     		{ 0, 1,-1,-1, 0, 0, 1, 0, 0, 0, 0 }  ,{ 0, 0, 0, 0}
-							     		{ 0, 0, 1, 1,-1,-1, 0, 0, 0, 0, 0 }  ,{ 0, 0, 0, 0}
-							     		{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1 }  ,{ 0, 0, 0, 0}
+/* Extended matrix izq der                									 			GLOBAL TRANSITIONS
+	{ 1, 0,-1, 0, 0, 0, 0, 0,-1, 0, 0, 0 },					  	       		 			,{ 0, 0,-1, 0}
+	{ 1,-1, 0, 0, 0, 0, 0, 0,-1,-1, 0, 0 },					           		 			,{ 0, 0, 0, 0}
+	{ 0,-1, 0, 0,-1, 1, 1,-1, 0, 0, 0, 0 },					           		 			,{ 0, 0, 0, 0}
+	{ 0, 1,-1,-1, 1, 0, 0, 1, 0, 0, 0, 0 }					           					,{ 0, 0, 0, 0}
+	{ 0, 0, 1, 1, 0,-1,-1, 0, 0, 0, 0, 0 }					           					,{ 0, 0, 0, 0}
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1 }					           					,{ 0, 0, 0, 0}
+						         			{ 1, 0,-1, 0, 0, 0, 0, 0,-1, 0, 0, 0 }, 	,{ 0, 0,-1, 0}
+							     			{ 1,-1, 0, 0, 0, 0, 0, 0,-1,-1, 0, 0 }, 	,{ 0, 0, 0, 0}
+							     			{ 0,-1, 0, 0,-1, 1, 1,-1, 0, 0, 0, 0 }, 	,{ 0, 0, 0, 0}
+							     			{ 0, 1,-1,-1, 1, 0, 0, 1, 0, 0, 0, 0 },		,{ 0, 0, 0, 0}
+							     			{ 0, 0, 1, 1, 0,-1,-1, 0, 0, 0, 0, 0 },		,{ 0, 0, 0, 0}
+							     			{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1 },		,{ 0, 0, 0, 0}
 	GLOBAL PLACE
-	{ 0, 0, 0, 0, 0, 0,-1, 0, 0, 0, 0 } { 0, 0, 0, 0, 0, 0,-1, 0, 0, 0, 0 }  ,{-1, 0, 0, 1}
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }  ,{ 0,-1, 0, 0}
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }  ,{ 0, 1, 0, 0}
+	{ 0, 0, 0, 0, 0, 0, 0,-1, 0, 0, 0, 0 } 	{ 0, 0, 0, 0, 0, 0, 0,-1, 0, 0, 0, 0 }  	,{-1, 0, 0, 1}
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }  	,{ 0,-1, 0, 0}
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }  	,{ 0, 1, 0, 0}
 */
 
 static __inline int transition_is_sensitized(int transition_index);
@@ -189,6 +189,10 @@ void resource_get_sensitized()
 	}
 }
 
+int get_place_tokens_qty(int place_index)
+{
+	return resource_net.mark[place_index];
+}
 
 void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 {
@@ -216,16 +220,6 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 				transitions_to_print = 0;
 			}
 		}
-
-		if(toggle_cpu_enabled) {
-			if (resource_net.mark[(cpu_to_suspend*CPU_BASE_PLACES) + PLACE_SUSPENDED] == 1){
-				resource_fire_single_transition(pt, (cpu_to_suspend*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC);
-			}
-			else {
-				resource_fire_single_transition(pt, (cpu_to_suspend*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC);
-			}
-			toggle_cpu_enabled = 0;
-		}
 	}
 
 	for(int i=0; i<4; i++){
@@ -238,7 +232,6 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 static void resource_fire_single_transition(struct thread *pt, int transition_index) {
 	int num_place;
 	int local_transition;
-	struct timespec ts;
 
 	//Fire cpu net
 	for (num_place = 0; num_place< CPU_NUMBER_PLACES; num_place++) {
@@ -251,8 +244,7 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	}
 
 	if (print_enabled && transitions_to_print != 0){
-    	nanotime(&ts);
-		printf("#& %06ld --- %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", ts.tv_nsec, transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
+		printf("#& %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
 		transitions_to_print--;
 	}
 }
@@ -359,35 +351,6 @@ void resource_remove_thread(struct thread *newtd, int cpu) {
 	resource_fire_net("resource_remove_thread", newtd, transition_number);
 }
 
-void print_resource_net() {
-	int i;
-	printf(": ");
-	for (i = 0; i < CPU_NUMBER_PLACES; i++) {
-		printf("%d ", resource_net.mark[i]);
-	}
-	printf("\n");
-}
-
-void print_uni_label() {
-printf("_____    ____ U _____ u  _____  __   __  _   _     \n");
-printf(" |\" ___|U /\"___|\\| ___\"|/ |\" ___| \\ \\ / / | \\ |\"|   \n");
-printf("U| |_  u\\| | u   |  _|\"  U| |_  u  \\ V / <|  \\| |>  \n");
-printf("\\|  _|/  | |/__  | |___  \\|  _|/  U_|\"|_uU| |\\  |u  \n");
-printf(" |_|      \\____| |_____|  |_|       |_|   |_| \\_|   \n");
-printf(" )(\\\\,-  _// \\\\  <<   >>  )(\\\\,-.-,//|(_  ||   \\\\,-.\n");
-printf("(__)(_/ (__)(__)(__) (__)(__)(_/ \\_) (__) (_\")  (_/ \n");
-printf("Colas de CPU: CPU_0 %d CPU_1 %d CPU_2 %d CPU_3 %d \n", resource_net.mark[PLACE_QUEUE + (0*CPU_BASE_PLACES)],
-	resource_net.mark[PLACE_QUEUE + (1*CPU_BASE_PLACES)], resource_net.mark[PLACE_QUEUE + (2*CPU_BASE_PLACES)],
-	resource_net.mark[PLACE_QUEUE + (3*CPU_BASE_PLACES)]);
-}
-
-void print_cpu_places() {
-	printf("PLACE CPU_0: %d \n", resource_net.mark[PLACE_CPU + (0*CPU_BASE_PLACES)]);
-	printf("PLACE CPU_1: %d \n", resource_net.mark[PLACE_CPU + (1*CPU_BASE_PLACES)]);
-	printf("PLACE CPU_2: %d \n", resource_net.mark[PLACE_CPU + (2*CPU_BASE_PLACES)]);
-	printf("PLACE CPU_3: %d \n", resource_net.mark[PLACE_CPU + (3*CPU_BASE_PLACES)]);
-}
-
 void print_detailed_places() {
 	for (int i = 0; i < CPU_BASE_PLACES; i++){
 		for (int j = 0; j < CPU_NUMBER; j++){
@@ -404,14 +367,23 @@ void set_print_transition(int number_transitions) {
 }
 
 void toggle_active_cpu(int cpu) {
-	printf("TOGGLE ACTIVE/INACTIVE CPU: CPU %d\n", cpu);
-	print_detailed_places();
-	set_print_transition(5000);
-	if (cpu >= CPU_NUMBER) {
-		printf("toggle_active_cpu exception - CPU %d does not exist\n", cpu);
+	if (cpu == 0) {
+		printf("toggle_active_cpu error - CPU 0 can not be turn off\n", cpu);
 		return;
 	}
-	cpu_to_suspend = cpu;
-	toggle_cpu_enabled = 1;
-	return;
+	else if (cpu >= CPU_NUMBER || cpu < 0) {
+		printf("toggle_active_cpu error - CPU %d does not exist\n", cpu);
+		return;
+	}
+
+	printf("TOGGLE ACTIVE/INACTIVE: CPU %d - Thread %2d\n", cpu, curthread->td_tid);
+	int tran_wakeup_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC;
+	int tran_suspend_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC;
+
+	if (transition_is_sensitized(tran_wakeup_index)){
+		resource_fire_net("toggle_active: wakeup", curthread, tran_wakeup_index);
+	}
+	else {
+		resource_fire_net("toggle_active: suspend", curthread, tran_suspend_index);
+	}
 }
