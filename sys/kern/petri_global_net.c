@@ -1,8 +1,8 @@
 /*
  ============================================================================
- Name        : PetriGlobalNet.c
- Author      :
- Version     :
+ Name        : petri_global_net.c
+ Author      : Drudi (@drudilea), Goldman (@nicolasgoldman07)
+ Version     : 1.0
  Copyright   : Your copyright notice
  Description : Hello World in C, Ansi-style
  ============================================================================
@@ -349,35 +349,6 @@ void resource_remove_thread(struct thread *newtd, int cpu) {
 		transition_number = (cpu * CPU_BASE_TRANSITIONS) + TRAN_REMOVE_EMPTY_QUEUE;
 
 	resource_fire_net("resource_remove_thread", newtd, transition_number);
-}
-
-void print_resource_net() {
-	int i;
-	printf(": ");
-	for (i = 0; i < CPU_NUMBER_PLACES; i++) {
-		printf("%d ", resource_net.mark[i]);
-	}
-	printf("\n");
-}
-
-void print_uni_label() {
-printf("_____    ____ U _____ u  _____  __   __  _   _     \n");
-printf(" |\" ___|U /\"___|\\| ___\"|/ |\" ___| \\ \\ / / | \\ |\"|   \n");
-printf("U| |_  u\\| | u   |  _|\"  U| |_  u  \\ V / <|  \\| |>  \n");
-printf("\\|  _|/  | |/__  | |___  \\|  _|/  U_|\"|_uU| |\\  |u  \n");
-printf(" |_|      \\____| |_____|  |_|       |_|   |_| \\_|   \n");
-printf(" )(\\\\,-  _// \\\\  <<   >>  )(\\\\,-.-,//|(_  ||   \\\\,-.\n");
-printf("(__)(_/ (__)(__)(__) (__)(__)(_/ \\_) (__) (_\")  (_/ \n");
-printf("Colas de CPU: CPU_0 %d CPU_1 %d CPU_2 %d CPU_3 %d \n", resource_net.mark[PLACE_QUEUE + (0*CPU_BASE_PLACES)],
-	resource_net.mark[PLACE_QUEUE + (1*CPU_BASE_PLACES)], resource_net.mark[PLACE_QUEUE + (2*CPU_BASE_PLACES)],
-	resource_net.mark[PLACE_QUEUE + (3*CPU_BASE_PLACES)]);
-}
-
-void print_cpu_places() {
-	printf("PLACE CPU_0: %d \n", resource_net.mark[PLACE_CPU + (0*CPU_BASE_PLACES)]);
-	printf("PLACE CPU_1: %d \n", resource_net.mark[PLACE_CPU + (1*CPU_BASE_PLACES)]);
-	printf("PLACE CPU_2: %d \n", resource_net.mark[PLACE_CPU + (2*CPU_BASE_PLACES)]);
-	printf("PLACE CPU_3: %d \n", resource_net.mark[PLACE_CPU + (3*CPU_BASE_PLACES)]);
 }
 
 void print_detailed_places() {
