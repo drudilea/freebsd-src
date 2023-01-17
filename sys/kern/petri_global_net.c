@@ -370,7 +370,7 @@ void set_print_transition(int number_transitions) {
 
 void toggle_active_cpu(int cpu) {
 	if (cpu == 0) {
-		printf("toggle_active_cpu error - CPU 0 can not be turn off\n", cpu);
+		printf("toggle_active_cpu error - CPU 0 can not be turn off\n");
 		return;
 	}
 	else if (cpu >= CPU_NUMBER || cpu < 0) {
