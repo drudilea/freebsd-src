@@ -25,6 +25,7 @@ int smp_set = 0;
 int print_enabled = 1;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
+int pinned_threads_per_cpu[CPU_NUMBER];
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base matrix */
@@ -293,7 +294,7 @@ int resource_choose_cpu(struct thread* td)
 	}
 
 	if (td->td_pinned != 0 || (td->td_flags & TDF_BOUND)) {
-		if (transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)) {
+		if (transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS) && cpu_available_for_thread(td->td_tid, td->td_lastcpu)) {
 			return 	td->td_lastcpu * CPU_BASE_TRANSITIONS;
 		}
 		else { //IF no cpu queue available or smp is not ready yet then send to global queue
@@ -303,8 +304,9 @@ int resource_choose_cpu(struct thread* td)
 
 	//Only check for transitions of addtoqueue
 	for (transition_index = TRAN_ADDTOQUEUE; transition_index < CPU_NUMBER_TRANSITION-4; transition_index += CPU_BASE_TRANSITIONS) {
-		if (transition_is_sensitized(transition_index)) {
-			if (THREAD_CAN_SCHED(td, (transition_index / CPU_BASE_TRANSITIONS)))
+		int cpu_number = transition_index / CPU_BASE_TRANSITIONS;
+		if (transition_is_sensitized(transition_index) && cpu_available_for_thread(td->td_tid, cpu_number)) {
+			if (THREAD_CAN_SCHED(td, cpu_number))
 				return transition_index;
 			else
 				cpu_available = transition_index;
@@ -386,4 +388,19 @@ void toggle_active_cpu(int cpu) {
 	else {
 		resource_fire_net("toggle_active: suspend", curthread, tran_suspend_index);
 	}
+}
+
+void pin_thread_to_cpu (int thread_id, int cpu) {
+	if (cpu >= CPU_NUMBER || cpu <= 0) {
+		printf("pin_thread_to_cpu error - CPU %d cannot be used to pin threads\n", cpu);
+		return;
+	}
+	pinned_threads_per_cpu[cpu] = thread_id;
+}
+
+int cpu_available_for_thread (int thread_id, int cpu) {
+	if (pinned_threads_per_cpu[cpu] == thread_id || pinned_threads_per_cpu[cpu] == -1) {
+		return 1;
+	}
+	return 0;
 }
