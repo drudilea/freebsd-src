@@ -25,7 +25,7 @@ int smp_set = 0;
 int print_enabled = 1;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
-int pinned_threads_per_cpu[CPU_NUMBER];
+int pinned_threads_per_cpu[CPU_NUMBER] = { -1, -1, -1, -1 };
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base matrix */

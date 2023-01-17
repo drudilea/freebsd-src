@@ -687,7 +687,6 @@ schedinit(void)
 	for (i = 0; i < PLACES_SIZE; i++) {
 		thread0.mark[i] = initial_mark_t0[i];
 	}
-	pinned_threads_per_cpu[CPU_NUMBER] = { -1, -1, -1, -1 };
 }
 
 void
