@@ -297,7 +297,7 @@ int resource_choose_cpu(struct thread* td)
 		if (transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)) {
 			if (print_enabled && transitions_to_print != 0){
 				printf("Thread %d is pinned or bounded to cpu %d \n", td->td_tid, td->td_lastcpu);
-				printf("cpu_available? %d \n", cpu_available_for_thread(td->td_tid, td->td_lastcpu));
+				printf("cpu_available? %d # ", cpu_available_for_thread(td->td_tid, td->td_lastcpu));
 			}
 			return 	td->td_lastcpu * CPU_BASE_TRANSITIONS;
 		}
@@ -313,7 +313,7 @@ int resource_choose_cpu(struct thread* td)
 			if (print_enabled && transitions_to_print != 0){
 				printf("Thread %d is NOT pinned or bounded\n", td->td_tid);
 				printf("Transition ADDTOQUEUE from CPU %d is sensitized\n", cpu_number);
-				printf("cpu_available? %d \n", cpu_available_for_thread(td->td_tid, td->td_lastcpu));
+				printf("cpu_available? %d # ", cpu_available_for_thread(td->td_tid, cpu_number));
 			}
 			if (THREAD_CAN_SCHED(td, cpu_number))
 				return transition_index;
@@ -409,6 +409,10 @@ void pin_thread_to_cpu (int thread_id, int cpu) {
 }
 
 int cpu_available_for_thread (int thread_id, int cpu) {
+	for (int i=0; i<4; i++) {
+		printf("%d, ", pinned_threads_per_cpu[i]);
+	}
+	printf("\n");
 	if (pinned_threads_per_cpu[cpu] == thread_id || pinned_threads_per_cpu[cpu] == -1) {
 		return 1;
 	}
