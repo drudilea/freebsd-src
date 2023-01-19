@@ -294,7 +294,11 @@ int resource_choose_cpu(struct thread* td)
 	}
 
 	if (td->td_pinned != 0 || (td->td_flags & TDF_BOUND)) {
-		if (transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS) && cpu_available_for_thread(td->td_tid, td->td_lastcpu)) {
+		if (transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)) {
+			if (print_enabled && transitions_to_print != 0){
+				printf("Thread %d is pinned or bounded to cpu %d \n", td->td_tid, td->td_lastcpu);
+				printf("cpu_available? %d \n", cpu_available_for_thread(td->td_tid, td->td_lastcpu));
+			}
 			return 	td->td_lastcpu * CPU_BASE_TRANSITIONS;
 		}
 		else { //IF no cpu queue available or smp is not ready yet then send to global queue
@@ -305,7 +309,12 @@ int resource_choose_cpu(struct thread* td)
 	//Only check for transitions of addtoqueue
 	for (transition_index = TRAN_ADDTOQUEUE; transition_index < CPU_NUMBER_TRANSITION-4; transition_index += CPU_BASE_TRANSITIONS) {
 		int cpu_number = transition_index / CPU_BASE_TRANSITIONS;
-		if (transition_is_sensitized(transition_index) && cpu_available_for_thread(td->td_tid, cpu_number)) {
+		if (transition_is_sensitized(transition_index)) {
+			if (print_enabled && transitions_to_print != 0){
+				printf("Thread %d is NOT pinned or bounded\n", td->td_tid);
+				printf("Transition ADDTOQUEUE from CPU %d is sensitized\n", cpu_number);
+				printf("cpu_available? %d \n", cpu_available_for_thread(td->td_tid, td->td_lastcpu));
+			}
 			if (THREAD_CAN_SCHED(td, cpu_number))
 				return transition_index;
 			else
@@ -395,6 +404,7 @@ void pin_thread_to_cpu (int thread_id, int cpu) {
 		printf("pin_thread_to_cpu error - CPU %d cannot be used to pin threads\n", cpu);
 		return;
 	}
+		printf("pin_thread_to_cpu - THREAD %d pinned/anchored to CPU%d \n", thread_id, cpu);
 	pinned_threads_per_cpu[cpu] = thread_id;
 }
 
