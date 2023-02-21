@@ -1272,18 +1272,26 @@ kick_other_cpu(int pri, int cpuid)
 static int
 sched_pickcpu(struct thread *td)
 {
-	int transition, cpu;
+	int best, cpu;
 
 	mtx_assert(&sched_lock, MA_OWNED);
 
-	transition = resource_choose_cpu(td);
-
-	if (transition == TRAN_QUEUE_GLOBAL || transition == -1)
-		cpu = NOCPU;
+	if (td->td_lastcpu != NOCPU && THREAD_CAN_SCHED(td, td->td_lastcpu))
+		best = td->td_lastcpu;
 	else
-		cpu = (int)(transition / CPU_BASE_TRANSITIONS);
+		best = NOCPU;
+	CPU_FOREACH (cpu) {
+		if (!THREAD_CAN_SCHED(td, cpu))
+			continue;
 
-	return (cpu);
+		if (best == NOCPU)
+			best = cpu;
+		else if (runq_length[cpu] < runq_length[best])
+			best = cpu;
+	}
+	KASSERT(best != NOCPU, ("no valid CPUs"));
+
+	return (best);
 }
 #endif
 
@@ -1340,14 +1348,32 @@ sched_add(struct thread *td, int flags)
     * as per-CPU state may not be initialized yet and we may crash if we
     * try to access the per-CPU run queues.
     */	
-	cpu = sched_pickcpu(td);
-	if (cpu != NOCPU) {
+	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
+	    ts->ts_flags & TSF_AFFINITY)) {
+		if (td->td_pinned != 0)
+			cpu = td->td_lastcpu;
+		else if (td->td_flags & TDF_BOUND) {
+			/* Find CPU from bound runq. */
+			KASSERT(SKE_RUNQ_PCPU(ts),
+			    ("sched_add: bound td_sched not on cpu runq"));
+			cpu = ts->ts_runq - &runq_pcpu[0];
+		} else
+			/* Find a valid CPU for our cpuset */
+			cpu = sched_pickcpu(td);
 		ts->ts_runq = &runq_pcpu[cpu];
 		single_cpu = 1;
+		resource_choose_cpu(td, cpu);
 		resource_fire_net("sched_add", td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
-	}
-	else {
+		CTR3(KTR_RUNQ,
+		    "sched_add: Put td_sched:%p(td:%p) on cpu%d runq", ts, td,
+		    cpu);
+	} else {
+		CTR2(KTR_RUNQ,
+		    "sched_add: adding td_sched:%p (td:%p) to gbl runq", ts,
+		    td);
+		cpu = NOCPU;
 		ts->ts_runq = &runq;
+		resource_choose_cpu(td, cpu);
 		resource_fire_net("sched_add", td, TRAN_QUEUE_GLOBAL);
 	}
 
