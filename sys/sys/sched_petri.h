@@ -64,7 +64,7 @@ void thread_print_detailed_places(struct thread *pt);
 void init_resource_net(void);
 void resource_get_sensitized(void);
 void resource_fire_net(char *trigger, struct thread *pt, int transition_index);
-int resource_choose_cpu(struct thread *td, int suggested_cpu);
+int resource_choose_cpu(struct thread *td);
 void resource_expulse_thread(struct thread *td, int flags);
 void resource_execute_thread(struct thread *newtd, int cpu);
 void resource_remove_thread(struct thread *newtd, int cpu);

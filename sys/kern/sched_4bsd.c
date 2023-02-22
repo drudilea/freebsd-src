@@ -142,6 +142,7 @@ static void	resetpriority(struct thread *td);
 static void	resetpriority_thread(struct thread *td);
 #ifdef SMP
 static int	sched_pickcpu(struct thread *td);
+static int	sched_petrinet_pickcpu(struct thread *td);
 static int	forward_wakeup(int cpunum);
 static void	kick_other_cpu(int pri, int cpuid);
 #endif
@@ -1014,6 +1015,20 @@ sched_switch(struct thread *td, int flags)
 	td->td_owepreempt = 0;
 	td->td_oncpu = NOCPU;
 
+	/*
+	 * Switch to the sched lock to fix things up and pick
+	 * a new thread.  Block the td_lock in order to avoid
+	 * breaking the critical path.
+	 */
+	if (td->td_lock != &sched_lock) {
+		mtx_lock_spin(&sched_lock);
+		tmtx = thread_lock_block(td);
+		mtx_unlock_spin(tmtx);
+	}
+
+	if ((td->td_flags & TDF_NOLOAD) == 0)
+		sched_load_rem();
+
 	resource_expulse_thread(td, flags);
 
 	/*
@@ -1035,20 +1050,6 @@ sched_switch(struct thread *td, int flags)
 			    SRQ_HOLDTD|SRQ_OURSELF|SRQ_YIELDING);
 		}
 	}
-
-	/*
-	 * Switch to the sched lock to fix things up and pick
-	 * a new thread.  Block the td_lock in order to avoid
-	 * breaking the critical path.
-	 */
-	if (td->td_lock != &sched_lock) {
-		mtx_lock_spin(&sched_lock);
-		tmtx = thread_lock_block(td);
-		mtx_unlock_spin(tmtx);
-	}
-
-	if ((td->td_flags & TDF_NOLOAD) == 0)
-		sched_load_rem();
 
 	newtd = choosethread();
 	resource_execute_thread(newtd, PCPU_GET(cpuid));
@@ -1295,6 +1296,25 @@ sched_pickcpu(struct thread *td)
 }
 #endif
 
+#ifdef SMP
+static int
+sched_petrinet_pickcpu(struct thread *td)
+{
+	int transition, cpu;
+
+	mtx_assert(&sched_lock, MA_OWNED);
+
+	transition = resource_choose_cpu(td);
+
+	if (transition == TRAN_QUEUE_GLOBAL || transition == -1)
+		cpu = NOCPU;
+	else
+		cpu = (int)(transition / CPU_BASE_TRANSITIONS);
+
+	return (cpu);
+}
+#endif
+
 void
 sched_add(struct thread *td, int flags)
 #ifdef SMP
@@ -1306,7 +1326,7 @@ sched_add(struct thread *td, int flags)
 	
 	cpuset_t tidlemsk;
 	struct td_sched *ts;
-	u_int cpu, cpuid;
+	u_int cpu, cpuid, cpu4BSD;
 	int forwarded = 0;
 	int single_cpu = 0;
 
@@ -1347,34 +1367,39 @@ sched_add(struct thread *td, int flags)
     * If SMP has not yet been started we must use the global run queue
     * as per-CPU state may not be initialized yet and we may crash if we
     * try to access the per-CPU run queues.
-    */	
+    */
+
+	cpu = sched_petrinet_pickcpu(td);
+	if (cpu != NOCPU) {
+		ts->ts_runq = &runq_pcpu[cpu];
+		single_cpu = 1;
+		resource_fire_net("sched_add", td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
+	}
+	else {
+		ts->ts_runq = &runq;
+		resource_fire_net("sched_add", td, TRAN_QUEUE_GLOBAL);
+	}
+
 	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
 	    ts->ts_flags & TSF_AFFINITY)) {
 		if (td->td_pinned != 0)
-			cpu = td->td_lastcpu;
+			cpu4BSD = td->td_lastcpu;
 		else if (td->td_flags & TDF_BOUND) {
-			/* Find CPU from bound runq. */
-			KASSERT(SKE_RUNQ_PCPU(ts),
-			    ("sched_add: bound td_sched not on cpu runq"));
-			cpu = ts->ts_runq - &runq_pcpu[0];
-		} else
-			/* Find a valid CPU for our cpuset */
-			cpu = sched_pickcpu(td);
-		ts->ts_runq = &runq_pcpu[cpu];
-		single_cpu = 1;
-		resource_choose_cpu(td, cpu);
-		resource_fire_net("sched_add", td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
-		CTR3(KTR_RUNQ,
-		    "sched_add: Put td_sched:%p(td:%p) on cpu%d runq", ts, td,
-		    cpu);
+			cpu4BSD = ts->ts_runq - &runq_pcpu[0];
+			if (cpu != cpu4BSD) {
+				printf("#### Petrinet choose cpu: %d, cpu4BSD: %d (TDF_BOUND section) ####\n", cpu, cpu4BSD);
+			}
+		} else {
+			cpu4BSD = sched_pickcpu(td);
+			if (cpu != cpu4BSD) {
+				printf("#### Petrinet choose cpu: %d, cpu4BSD: %d (sched_pickcpu section) ####\n", cpu, cpu4BSD);
+			}
+		}
 	} else {
-		CTR2(KTR_RUNQ,
-		    "sched_add: adding td_sched:%p (td:%p) to gbl runq", ts,
-		    td);
-		cpu = NOCPU;
-		ts->ts_runq = &runq;
-		resource_choose_cpu(td, cpu);
-		resource_fire_net("sched_add", td, TRAN_QUEUE_GLOBAL);
+		cpu4BSD = NOCPU;
+		if (cpu != cpu4BSD) {
+			printf("#### Petrinet choose cpu: %d, cpu4BSD: %d (NOCPU section) ####\n", cpu, cpu4BSD);
+		}
 	}
 
 	if ((td->td_flags & TDF_NOLOAD) == 0)

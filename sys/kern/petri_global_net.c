@@ -274,60 +274,36 @@ static __inline int transition_is_sensitized(int transition_index)
 	return 1;
 }
 
-int resource_choose_cpu(struct thread* td, int suggested_cpu)
+int resource_choose_cpu(struct thread* td)
 {
 	//First we need to know which of the cpu queues is sensitized
 	int transition_index;
 	int cpu_available = NOCPU;
 
 	if (!smp_started) {
-		if (print_enabled && transitions_to_print != 0) {
-			printf("PetriNet model chose %d, but sched_pickcpu chose %d\n", NOCPU, suggested_cpu);
-			transitions_to_print--;
-		}
-		// TRAN_QUEUE_GLOBAL
-		return NOCPU;
+		return TRAN_QUEUE_GLOBAL;
 	}
 
 	if (td->td_pinned != 0 || (td->td_flags & TDF_BOUND)) {
 		if (transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)) {
-			if (print_enabled && transitions_to_print != 0) {
-				printf("PetriNet model chose %d, but sched_pickcpu chose %d\n", td->td_lastcpu, suggested_cpu);
-				transitions_to_print--;
-			}
-			return td->td_lastcpu;
+			return 	td->td_lastcpu * CPU_BASE_TRANSITIONS;
 		}
 		else { //IF no cpu queue available or smp is not ready yet then send to global queue
-			if (print_enabled && transitions_to_print != 0) {
-				printf("PetriNet model chose %d, but sched_pickcpu chose %d\n", NOCPU, suggested_cpu);
-				transitions_to_print--;
-			}
-			// TRAN_QUEUE_GLOBAL
-			return NOCPU;
+			return TRAN_QUEUE_GLOBAL;
 		}
 	}
 
 	//Only check for transitions of addtoqueue
 	for (transition_index = TRAN_ADDTOQUEUE; transition_index < CPU_NUMBER_TRANSITION-4; transition_index += CPU_BASE_TRANSITIONS) {
 		if (transition_is_sensitized(transition_index)) {
-			int cpu = transition_index / CPU_BASE_TRANSITIONS;
-			if (THREAD_CAN_SCHED(td, cpu)) {
-				if (print_enabled && transitions_to_print != 0) {
-					printf("PetriNet model chose %d, but sched_pickcpu chose %d\n", cpu, suggested_cpu);
-					transitions_to_print--;
-				}
-				return cpu;
-			}
+			if (THREAD_CAN_SCHED(td, (transition_index / CPU_BASE_TRANSITIONS)))
+				return transition_index;
 			else
-				cpu_available = cpu;
+				cpu_available = transition_index;
 		}
 	}
 
 	KASSERT(cpu_available == NOCPU, ("no valid CPUs"));
-	if (print_enabled && transitions_to_print != 0) {
-		printf("PetriNet model chose %d, but sched_pickcpu chose %d\n", cpu_available, suggested_cpu);
-		transitions_to_print--;
-	}
 	return cpu_available;
 }
 
