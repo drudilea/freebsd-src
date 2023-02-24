@@ -1365,12 +1365,13 @@ sched_add(struct thread *td, int flags)
 	    ts->ts_flags & TSF_AFFINITY)) {
 		if (td->td_pinned != 0 && transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS))
 			cpu = td->td_lastcpu;
-		else if (td->td_flags & TDF_BOUND && transition_is_sensitized(boundcpu * CPU_BASE_TRANSITIONS)) {
-			/* Find CPU from bound runq. */
-			KASSERT(SKE_RUNQ_PCPU(ts),
-			    ("sched_add: bound td_sched not on cpu runq"));
-			cpu = boundcpu;
-		} else
+		// else if (td->td_flags & TDF_BOUND && transition_is_sensitized(boundcpu * CPU_BASE_TRANSITIONS)) {
+		// 	/* Find CPU from bound runq. */
+		// 	KASSERT(SKE_RUNQ_PCPU(ts),
+		// 	    ("sched_add: bound td_sched not on cpu runq"));
+		// 	cpu = boundcpu;
+		// }
+		else
 			cpu = sched_petrinet_pickcpu(td); /* Find a valid CPU for our cpuset */
 	}
 
