@@ -1318,7 +1318,7 @@ sched_add(struct thread *td, int flags)
 	
 	cpuset_t tidlemsk;
 	struct td_sched *ts;
-	u_int cpu, cpuid;
+	u_int cpu = NOCPU, cpuid;
 	int forwarded = 0;
 	int single_cpu = 0;
 
@@ -1370,23 +1370,23 @@ sched_add(struct thread *td, int flags)
 			    ("sched_add: bound td_sched not on cpu runq"));
 			cpu = ts->ts_runq - &runq_pcpu[0];
 		} else
-			/* Find a valid CPU for our cpuset */
-			cpu = sched_petrinet_pickcpu(td);
+			cpu = sched_petrinet_pickcpu(td); /* Find a valid CPU for our cpuset */
+	}
+
+	if(cpu != NOCPU) {
 		ts->ts_runq = &runq_pcpu[cpu];
 		resource_fire_net("sched_add", td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
 		single_cpu = 1;
 		CTR3(KTR_RUNQ,
-		    "sched_add: Put td_sched:%p(td:%p) on cpu%d runq", ts, td,
-		    cpu);
+			"sched_add: Put td_sched:%p(td:%p) on cpu%d runq", ts, td,
+			cpu);
 	} else {
 		CTR2(KTR_RUNQ,
 		    "sched_add: adding td_sched:%p (td:%p) to gbl runq", ts,
 		    td);
-		cpu = NOCPU;
 		ts->ts_runq = &runq;
 		resource_fire_net("sched_add", td, TRAN_QUEUE_GLOBAL);
 	}
-
 
 	if ((td->td_flags & TDF_NOLOAD) == 0)
 		sched_load_add();
