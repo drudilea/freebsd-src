@@ -281,10 +281,11 @@ int resource_choose_cpu(struct thread* td)
 
 	if (
 		td->td_lastcpu != NOCPU &&
-		THREAD_CAN_SCHED(td, td->td_lastcpu &&
-		transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS))
+		THREAD_CAN_SCHED(td, td->td_lastcpu) &&
+		transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)
 	) {
 		best = td->td_lastcpu;
+		return best;
 	}
 
 	//Only check for transitions of addtoqueue
