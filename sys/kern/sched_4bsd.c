@@ -1318,7 +1318,7 @@ sched_add(struct thread *td, int flags)
 	
 	cpuset_t tidlemsk;
 	struct td_sched *ts;
-	u_int cpu = NOCPU, cpuid;
+	u_int cpu = NOCPU, cpuid, boundcpu;
 	int forwarded = 0;
 	int single_cpu = 0;
 
@@ -1360,15 +1360,16 @@ sched_add(struct thread *td, int flags)
     * as per-CPU state may not be initialized yet and we may crash if we
     * try to access the per-CPU run queues.
     */
+   	boundcpu = ts->ts_runq - &runq_pcpu[0];
 	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
 	    ts->ts_flags & TSF_AFFINITY)) {
 		if (td->td_pinned != 0 && transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS))
 			cpu = td->td_lastcpu;
-		else if (td->td_flags & TDF_BOUND && transition_is_sensitized((ts->ts_runq - &runq_pcpu[0]) * CPU_BASE_TRANSITIONS)) {
+		else if (td->td_flags & TDF_BOUND && transition_is_sensitized(boundcpu * CPU_BASE_TRANSITIONS)) {
 			/* Find CPU from bound runq. */
 			KASSERT(SKE_RUNQ_PCPU(ts),
 			    ("sched_add: bound td_sched not on cpu runq"));
-			cpu = ts->ts_runq - &runq_pcpu[0];
+			cpu = boundcpu;
 		} else
 			cpu = sched_petrinet_pickcpu(td); /* Find a valid CPU for our cpuset */
 	}
