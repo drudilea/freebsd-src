@@ -299,7 +299,6 @@ int resource_choose_cpu(struct thread* td)
 
 	//Only check for transitions of addtoqueue
 	for (transition_index = TRAN_ADDTOQUEUE; transition_index < CPU_NUMBER_TRANSITION-4; transition_index += CPU_BASE_TRANSITIONS) {
-		int cpu_number = transition_index / CPU_BASE_TRANSITIONS;
 		if (transition_is_sensitized(transition_index)) {
 			if (!THREAD_CAN_SCHED(td, (transition_index / CPU_BASE_TRANSITIONS)))
 				continue;
