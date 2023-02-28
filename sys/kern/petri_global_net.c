@@ -102,7 +102,6 @@ const int hierarchical_corresponse[] = {
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }  	,{ 0, 1, 0, 0}
 */
 
-static __inline int transition_is_sensitized(int transition_index);
 static void resource_fire_single_transition(struct thread *pt, int transition_index);
 static int get_automatic_transitions_sensitized(void);
 
@@ -265,7 +264,7 @@ static int get_automatic_transitions_sensitized()
 	return -1;
 }
 
-static __inline int transition_is_sensitized(int transition_index)
+int transition_is_sensitized(int transition_index)
 {
 	int places_index;
 
@@ -287,43 +286,31 @@ int resource_choose_cpu(struct thread* td)
 {
 	//First we need to know which of the cpu queues is sensitized
 	int transition_index;
-	int cpu_available = NOCPU;
+	int best = NOCPU;
 
-	if (!smp_started) {
-		return TRAN_QUEUE_GLOBAL;
-	}
-
-	if (td->td_pinned != 0 || (td->td_flags & TDF_BOUND)) {
-		if (transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)) {
-			if (print_enabled && transitions_to_print != 0){
-				printf("Thread %d is pinned or bounded to cpu %d \n", td->td_tid, td->td_lastcpu);
-				printf("cpu_available? %d # ", cpu_available_for_thread(td->td_tid, td->td_lastcpu));
-			}
-			return 	td->td_lastcpu * CPU_BASE_TRANSITIONS;
-		}
-		else { //IF no cpu queue available or smp is not ready yet then send to global queue
-			return TRAN_QUEUE_GLOBAL;
-		}
+	if (
+		td->td_lastcpu != NOCPU &&
+		THREAD_CAN_SCHED(td, td->td_lastcpu) &&
+		transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)
+	) {
+		best = td->td_lastcpu;
+		return best;
 	}
 
 	//Only check for transitions of addtoqueue
 	for (transition_index = TRAN_ADDTOQUEUE; transition_index < CPU_NUMBER_TRANSITION-4; transition_index += CPU_BASE_TRANSITIONS) {
 		int cpu_number = transition_index / CPU_BASE_TRANSITIONS;
 		if (transition_is_sensitized(transition_index)) {
-			if (print_enabled && transitions_to_print != 0){
-				printf("Thread %d is NOT pinned or bounded\n", td->td_tid);
-				printf("Transition ADDTOQUEUE from CPU %d is sensitized\n", cpu_number);
-				printf("cpu_available? %d # ", cpu_available_for_thread(td->td_tid, cpu_number));
+			if (!THREAD_CAN_SCHED(td, (transition_index / CPU_BASE_TRANSITIONS)))
+				continue;
+			else {
+				best = (transition_index / CPU_BASE_TRANSITIONS);
+				break;
 			}
-			if (THREAD_CAN_SCHED(td, cpu_number))
-				return transition_index;
-			else
-				cpu_available = transition_index;
 		}
 	}
 
-	KASSERT(cpu_available == NOCPU, ("no valid CPUs"));
-	return cpu_available;
+	return best;
 }
 
 void resource_expulse_thread(struct thread *td, int flags) {
