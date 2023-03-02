@@ -1,8 +1,8 @@
 /*
  ============================================================================
- Name        : PetriGlobalNet.c
- Author      :
- Version     :
+ Name        : petri_global_net.c
+ Author      : Drudi (@drudilea), Goldman (@nicolasgoldman07)
+ Version     : 1.0
  Copyright   : Your copyright notice
  Description : Hello World in C, Ansi-style
  ============================================================================
@@ -95,7 +95,6 @@ const int hierarchical_corresponse[] = {
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0} { 0, 0, 0, 0, 0, 0, 0, 0, 0}  ,{ 0, 0, 1, 0, 0}
 */
 
-static __inline int transition_is_sensitized(int transition_index);
 static void resource_fire_single_transition(struct thread *pt, int transition_index);
 static int get_automatic_transitions_sensitized(void);
 
@@ -222,7 +221,6 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 static void resource_fire_single_transition(struct thread *pt, int transition_index) {
 	int num_place;
 	int local_transition;
-	struct timespec ts;
 
 	//Fire cpu net
 	for (num_place = 0; num_place< CPU_NUMBER_PLACES; num_place++) {
@@ -235,8 +233,7 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 	}
 
 	if (print_enabled && transitions_to_print != 0){
-    	nanotime(&ts);
-		printf("#& %06ld --- %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", ts.tv_nsec, transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
+		printf("#& %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
 		transitions_to_print--;
 	}
 }
@@ -256,7 +253,7 @@ static int get_automatic_transitions_sensitized()
 	return -1;
 }
 
-static __inline int transition_is_sensitized(int transition_index)
+int transition_is_sensitized(int transition_index)
 {
 	int places_index;
 
@@ -278,33 +275,30 @@ int resource_choose_cpu(struct thread* td)
 {
 	//First we need to know which of the cpu queues is sensitized
 	int transition_index;
-	int cpu_available = NOCPU;
+	int best = NOCPU;
 
-	if (!smp_started) {
-		return TRAN_QUEUE_GLOBAL;
-	}
-
-	if (td->td_pinned != 0 || (td->td_flags & TDF_BOUND)) {
-		if (transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)) {
-			return 	td->td_lastcpu * CPU_BASE_TRANSITIONS;
-		}
-		else { //IF no cpu queue available or smp is not ready yet then send to global queue
-			return TRAN_QUEUE_GLOBAL;
-		}
+	if (
+		td->td_lastcpu != NOCPU &&
+		THREAD_CAN_SCHED(td, td->td_lastcpu) &&
+		transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)
+	) {
+		best = td->td_lastcpu;
+		return best;
 	}
 
 	//Only check for transitions of addtoqueue
 	for (transition_index = TRAN_ADDTOQUEUE; transition_index < CPU_NUMBER_TRANSITION-4; transition_index += CPU_BASE_TRANSITIONS) {
 		if (transition_is_sensitized(transition_index)) {
-			if (THREAD_CAN_SCHED(td, (transition_index / CPU_BASE_TRANSITIONS)))
-				return transition_index;
-			else
-				cpu_available = transition_index;
+			if (!THREAD_CAN_SCHED(td, (transition_index / CPU_BASE_TRANSITIONS)))
+				continue;
+			else {
+				best = (transition_index / CPU_BASE_TRANSITIONS);
+				break;
+			}
 		}
 	}
 
-	KASSERT(cpu_available == NOCPU, ("no valid CPUs"));
-	return cpu_available;
+	return best;
 }
 
 void resource_expulse_thread(struct thread *td, int flags) {
@@ -341,35 +335,6 @@ void resource_remove_thread(struct thread *newtd, int cpu) {
 		transition_number = (cpu * CPU_BASE_TRANSITIONS) + TRAN_REMOVE_EMPTY_QUEUE;
 
 	resource_fire_net("resource_remove_thread", newtd, transition_number);
-}
-
-void print_resource_net() {
-	int i;
-	printf(": ");
-	for (i = 0; i < CPU_NUMBER_PLACES; i++) {
-		printf("%d ", resource_net.mark[i]);
-	}
-	printf("\n");
-}
-
-void print_uni_label() {
-printf("_____    ____ U _____ u  _____  __   __  _   _     \n");
-printf(" |\" ___|U /\"___|\\| ___\"|/ |\" ___| \\ \\ / / | \\ |\"|   \n");
-printf("U| |_  u\\| | u   |  _|\"  U| |_  u  \\ V / <|  \\| |>  \n");
-printf("\\|  _|/  | |/__  | |___  \\|  _|/  U_|\"|_uU| |\\  |u  \n");
-printf(" |_|      \\____| |_____|  |_|       |_|   |_| \\_|   \n");
-printf(" )(\\\\,-  _// \\\\  <<   >>  )(\\\\,-.-,//|(_  ||   \\\\,-.\n");
-printf("(__)(_/ (__)(__)(__) (__)(__)(_/ \\_) (__) (_\")  (_/ \n");
-printf("Colas de CPU: CPU_0 %d CPU_1 %d CPU_2 %d CPU_3 %d \n", resource_net.mark[PLACE_QUEUE + (0*CPU_BASE_PLACES)],
-	resource_net.mark[PLACE_QUEUE + (1*CPU_BASE_PLACES)], resource_net.mark[PLACE_QUEUE + (2*CPU_BASE_PLACES)],
-	resource_net.mark[PLACE_QUEUE + (3*CPU_BASE_PLACES)]);
-}
-
-void print_cpu_places() {
-	printf("PLACE CPU_0: %d \n", resource_net.mark[PLACE_CPU + (0*CPU_BASE_PLACES)]);
-	printf("PLACE CPU_1: %d \n", resource_net.mark[PLACE_CPU + (1*CPU_BASE_PLACES)]);
-	printf("PLACE CPU_2: %d \n", resource_net.mark[PLACE_CPU + (2*CPU_BASE_PLACES)]);
-	printf("PLACE CPU_3: %d \n", resource_net.mark[PLACE_CPU + (3*CPU_BASE_PLACES)]);
 }
 
 void print_detailed_places() {
