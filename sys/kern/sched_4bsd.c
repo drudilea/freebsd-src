@@ -1498,6 +1498,9 @@ sched_choose(void)
 {
 	struct thread *td;
 	struct runq *rq;
+	int is_cpu_suspended;
+
+	is_cpu_suspended = get_place_tokens_qty(PLACE_SUSPENDED + (PCPU_GET(cpuid)*CPU_BASE_PLACES));
 
 	mtx_assert(&sched_lock,  MA_OWNED);
 #ifdef SMP
@@ -1507,20 +1510,27 @@ sched_choose(void)
 	td = runq_choose_fuzz(&runq, runq_fuzz);
 	tdcpu = runq_choose(&runq_pcpu[PCPU_GET(cpuid)]);
 
-	if (td == NULL ||
-	    (tdcpu != NULL &&
-	     tdcpu->td_priority < td->td_priority)) {
+	if (is_cpu_suspended || td == NULL ||
+	    (tdcpu != NULL && tdcpu->td_priority < td->td_priority)) {
 		CTR2(KTR_RUNQ, "choosing td %p from pcpu runq %d", tdcpu,
-		     PCPU_GET(cpuid));
+		    PCPU_GET(cpuid));
 		td = tdcpu;
 		rq = &runq_pcpu[PCPU_GET(cpuid)];
 
 		if(td) {
-			resource_fire_net("sched_choose", td, TRAN_UNQUEUE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+			resource_fire_net("sched_choose_1", td, TRAN_UNQUEUE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+		}
+		else if (is_cpu_suspended){
+			if(PCPU_GET(idlethread)->td_frominh == 1) {
+				thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
+				PCPU_GET(idlethread)->td_frominh = 0;
+			}
+			resource_fire_net("sched_choose_4", PCPU_GET(idlethread), TRAN_EXEC_IDLE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+			return (PCPU_GET(idlethread));
 		}
 	} else{
 		CTR1(KTR_RUNQ, "choosing td_sched %p from main runq", td);
-		resource_fire_net("sched_choose", td, TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+		resource_fire_net("sched_choose_2", td, TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 	}
 
 #else
@@ -1545,8 +1555,7 @@ sched_choose(void)
 		thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
 		PCPU_GET(idlethread)->td_frominh = 0;
 	}
-	resource_fire_net("sched_choose", PCPU_GET(idlethread), TRAN_QUEUE_GLOBAL);
-	resource_fire_net("sched_choose", PCPU_GET(idlethread), TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+	resource_fire_net("sched_choose_3", PCPU_GET(idlethread), TRAN_EXEC_IDLE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 	return (PCPU_GET(idlethread));
 }
 
