@@ -104,5 +104,3 @@ thread_search_and_fire(struct thread *pt){
 		thread_petri_fire(pt, i);
 	}
 }
-
-
