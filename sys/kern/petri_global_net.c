@@ -288,10 +288,18 @@ int resource_choose_cpu(struct thread* td)
 	int transition_index;
 	int best = NOCPU;
 
+	int monopolized_cpu = get_monopolized_cpu_by_thread_id(td->td_tid);
+	if (monopolized_cpu != -1) {
+		printf("CHOOSING MONOPOLIZED CPU: %d\n", monopolized_cpu);
+		best = monopolized_cpu;
+		return best;
+	}
+
 	if (
 		td->td_lastcpu != NOCPU &&
 		THREAD_CAN_SCHED(td, td->td_lastcpu) &&
-		transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)
+		transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS) &&
+		cpu_available_for_thread(td->td_tid, td->td_lastcpu)
 	) {
 		best = td->td_lastcpu;
 		return best;
@@ -300,10 +308,14 @@ int resource_choose_cpu(struct thread* td)
 	//Only check for transitions of addtoqueue
 	for (transition_index = TRAN_ADDTOQUEUE; transition_index < CPU_NUMBER_TRANSITION-4; transition_index += CPU_BASE_TRANSITIONS) {
 		if (transition_is_sensitized(transition_index)) {
-			if (!THREAD_CAN_SCHED(td, (transition_index / CPU_BASE_TRANSITIONS)))
+			int sensitized_transition_cpu = transition_index / CPU_BASE_TRANSITIONS;
+			if (
+				!THREAD_CAN_SCHED(td, sensitized_transition_cpu) ||
+				!cpu_available_for_thread(td->td_tid, sensitized_transition_cpu)
+			)
 				continue;
 			else {
-				best = (transition_index / CPU_BASE_TRANSITIONS);
+				best = sensitized_transition_cpu;
 				break;
 			}
 		}
@@ -385,22 +397,32 @@ void toggle_active_cpu(int cpu) {
 	}
 }
 
-void pin_thread_to_cpu (int thread_id, int cpu) {
-	if (cpu >= CPU_NUMBER || cpu <= 0) {
-		printf("pin_thread_to_cpu error - CPU %d cannot be used to pin threads\n", cpu);
+void toggle_pin_thread_to_cpu (int thread_id, int cpu) {
+	if (cpu >= CPU_NUMBER || cpu <= 0 || cpu_available_for_thread(thread_id, cpu) == 0) {
+		printf("pin_thread_to_cpu error - CPU %d cannot be used to pin this thread\n", cpu);
 		return;
 	}
-		printf("pin_thread_to_cpu - THREAD %d pinned/anchored to CPU%d \n", thread_id, cpu);
-	pinned_threads_per_cpu[cpu] = thread_id;
+	if(pinned_threads_per_cpu[cpu] == thread_id){
+		printf("unpin thread from cpu - THREAD %d unpinned from CPU%d \n", thread_id, cpu);
+		pinned_threads_per_cpu[cpu] = -1;
+	} else {
+		printf("pin thread to cpu - THREAD %d pinned to CPU%d \n", thread_id, cpu);
+		pinned_threads_per_cpu[cpu] = thread_id;
+	}
 }
 
 int cpu_available_for_thread (int thread_id, int cpu) {
-	for (int i=0; i<4; i++) {
-		printf("%d, ", pinned_threads_per_cpu[i]);
-	}
-	printf("\n");
 	if (pinned_threads_per_cpu[cpu] == thread_id || pinned_threads_per_cpu[cpu] == -1) {
 		return 1;
 	}
 	return 0;
+}
+
+int get_monopolized_cpu_by_thread_id (int thread_id) {
+    for (int i = 0; i < CPU_NUMBER; i++) {
+        if (pinned_threads_per_cpu[i] == thread_id) {
+            return i;
+        }
+    }
+    return -1;
 }

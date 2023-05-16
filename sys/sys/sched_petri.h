@@ -74,7 +74,8 @@ void print_detailed_places(void);
 void set_print_transition(int transitions_to_print);
 void toggle_active_cpu(int cpu);
 int get_place_tokens_qty(int place_index);
-void pin_thread_to_cpu(int thread_id, int cpu);
+void toggle_pin_thread_to_cpu(int thread_id, int cpu);
 int cpu_available_for_thread(int thread_id, int cpu);
+int get_monopolized_cpu_by_thread_id(int thread_id);
 
 #endif

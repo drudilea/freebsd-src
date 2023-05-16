@@ -58,7 +58,7 @@ thread_transition_is_sensitized(struct thread *pt, int transition_index)
 
 	for (places_index = 0; places_index < PLACES_SIZE; places_index++) {
 
-		if (((matrix_Incidence[places_index][transition_index] < 0) && 
+		if (((matrix_Incidence[places_index][transition_index] < 0) &&
 			//If incidence is positive we really dont care if there are tokens or not
 			((matrix_Incidence[places_index][transition_index] + pt->mark[places_index]) < 0)))
 		{
@@ -104,5 +104,3 @@ thread_search_and_fire(struct thread *pt){
 		thread_petri_fire(pt, i);
 	}
 }
-
-
