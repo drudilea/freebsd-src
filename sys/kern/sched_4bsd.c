@@ -1504,29 +1504,41 @@ sched_choose(void)
 {
 	struct thread *td;
 	struct runq *rq;
-	int is_cpu_suspended;
-
-	is_cpu_suspended = get_place_tokens_qty(PLACE_SUSPENDED + (PCPU_GET(cpuid)*CPU_BASE_PLACES));
 
 	mtx_assert(&sched_lock,  MA_OWNED);
 #ifdef SMP
+	int is_cpu_suspended;
 	struct thread *tdcpu;
 
-	rq = &runq;
-	td = runq_choose_fuzz(&runq, runq_fuzz);
-	tdcpu = runq_choose(&runq_pcpu[PCPU_GET(cpuid)]);
+	is_cpu_suspended = get_place_tokens_qty(PLACE_SUSPENDED + (PCPU_GET(cpuid)*CPU_BASE_PLACES));
+	rq = &runq; // Cola global
+	td = runq_choose_fuzz(&runq, runq_fuzz); // Selecciona un thread de la cola global
+	tdcpu = runq_choose(&runq_pcpu[PCPU_GET(cpuid)]); // Selecciona un thread de la cola de la CPU que está corriendo
 
 	if (is_cpu_suspended || td == NULL ||
 	    (tdcpu != NULL && tdcpu->td_priority < td->td_priority)) {
+		// Aca entro si
+		// 1) La CPU está suspendida
+		// 2) No hay threads en la cola global (el tdcpu puede ser null)
+		// 3) Existe un thread de la CPU y tiene mayor prioridad que el thread de la cola global
+
+		// Aca adentro el hilo SIEMPRE es el del CPU
 		CTR2(KTR_RUNQ, "choosing td %p from pcpu runq %d", tdcpu,
 		    PCPU_GET(cpuid));
 		td = tdcpu;
 		rq = &runq_pcpu[PCPU_GET(cpuid)];
 
+		// Si el motivo por el que se entra al if es porque hay un thread de la CPU y tiene mayor prioridad que el thread de la cola global
+		// se ejecuta el siguiente if y continua la ejecución por fuera del if
 		if(td) {
 			resource_fire_net("sched_choose_1", td, TRAN_UNQUEUE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 		}
+		// TODO Agregar logica para imprimir monopolized
+		// TODO Corroborar compatibilidad entre suspendido y monopolizado (si hay uno que no haya el otro)
+		// Acá se llega solo si no hay hilos en la cola del CPU y el procesador está suspendido
+		// Se retorna el idlethread
 		else if (is_cpu_suspended){
+			// TODO Puede eliminarse el if(...)... ya que termina haciendo lo mismo que al final
 			if(PCPU_GET(idlethread)->td_frominh == 1) {
 				thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
 				PCPU_GET(idlethread)->td_frominh = 0;
@@ -1534,15 +1546,30 @@ sched_choose(void)
 			resource_fire_net("sched_choose_4", PCPU_GET(idlethread), TRAN_EXEC_IDLE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 			return (PCPU_GET(idlethread));
 		}
-	} else{
-		CTR1(KTR_RUNQ, "choosing td_sched %p from main runq", td);
-		resource_fire_net("sched_choose_2", td, TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+		// Acá se llega solo si NO hay hilos en la cola del CPU y el procesador NO está suspendido, basicamente no hace nada
+		// y llega hasta el fondo retornando el idlethread
+	} else {
+		// Aca entro si
+		// La CPU no está suspendida && Hay threads en la cola global && (No hay threads de la CPU || el thread de la CPU tiene menor prioridad que el thread de la cola global)
+		if(cpu_available_for_thread(td->td_tid, PCPU_GET(cpuid))) {
+			// El td es el de la cola global y se continua la ejecución
+			CTR1(KTR_RUNQ, "choosing td_sched %p from main runq", td);
+			resource_fire_net("sched_choose_2", td, TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+		} else {
+			td = NULL;
+		}
 	}
 
 #else
 	rq = &runq;
 	td = runq_choose(&runq);
 #endif
+	// Si el CPU esta suspendido, todo lo que sigue no se ejecuta
+	// Aca llego con los siguientes casos del thread
+	// 1) El thread es el de la cola global
+	// 2) El thread es el de la cola de la CPU
+	// 3) El thread es el de la cola del CPU y es NULL -> retorna el idlethread
+
 	if (td) {
 #ifdef SMP
 		if (td == tdcpu)
