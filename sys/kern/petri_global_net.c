@@ -243,9 +243,20 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 		thread_petri_fire(pt, local_transition);
 	}
 
-	if (print_enabled && transitions_to_print != 0){
-		printf("#& %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
-		transitions_to_print--;
+	if (print_enabled && transitions_to_print != 0) {
+		int monopolizedThread = 0;
+
+		for (int i = 0; i < 4; i++) {
+			if (pt->td_tid == pinned_threads_per_cpu[i]) {
+				monopolizedThread = 1;
+				break;
+			}
+		}
+
+		if (monopolizedThread) {
+			printf("#& %s Transition OK: %2d - Thread %2d - CPU %2d &#\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid));
+			transitions_to_print--;
+		}
 	}
 }
 
