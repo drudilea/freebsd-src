@@ -438,8 +438,12 @@ int cpu_available_for_thread (int thread_id, int cpu) {
 int get_monopolized_cpu_by_thread_id (int thread_id) {
     for (int i = 0; i < CPU_NUMBER; i++) {
         if (pinned_threads_per_cpu[i] == thread_id) {
+			printf("la comparacion TRUE es %d == %d\n", pinned_threads_per_cpu[i], thread_id);
             return i;
-        }
+        } else {
+			printf("la comparacion FALSE es %d == %d\n", pinned_threads_per_cpu[i], thread_id);
+		}
+
     }
     return -1;
 }
