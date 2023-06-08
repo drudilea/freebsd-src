@@ -420,6 +420,12 @@ void toggle_pin_thread_to_cpu (int thread_id, int cpu) {
 		printf("pin thread to cpu - THREAD %d pinned to CPU%d \n", thread_id, cpu);
 		pinned_threads_per_cpu[cpu] = thread_id;
 	}
+
+	// TODO: Delete this print lines after making it work
+	for (int i = 0; i < 4; i++) {
+        printf("%d ", pinned_threads_per_cpu[i]);
+    }
+    printf("\n");
 }
 
 int cpu_available_for_thread (int thread_id, int cpu) {
