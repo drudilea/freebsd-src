@@ -25,7 +25,7 @@ int smp_set = 0;
 int print_enabled = 1;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
-int pinned_threads_per_cpu[CPU_NUMBER] = { -1, -1, -1, -1 };
+static int pinned_threads_per_cpu[CPU_NUMBER] = { -1, -1, -1, -1 };
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base matrix */
@@ -430,7 +430,6 @@ int cpu_available_for_thread (int thread_id, int cpu) {
 }
 
 int get_monopolized_cpu_by_thread_id (int thread_id) {
-	printf("get_monopolized_cpu_by_thread_id params - THREAD %d \n", thread_id);
     for (int i = 0; i < CPU_NUMBER; i++) {
         if (pinned_threads_per_cpu[i] == thread_id) {
             return i;
