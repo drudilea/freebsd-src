@@ -245,9 +245,10 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 
 	if (print_enabled && transitions_to_print != 0) {
 		int monopolizedThread = 0;
+		int tid = (int) pt->td_tid;
 
 		for (int i = 0; i < 4; i++) {
-			if (pt->td_tid == pinned_threads_per_cpu[i]) {
+			if (tid == pinned_threads_per_cpu[i]) {
 				monopolizedThread = 1;
 				break;
 			}
@@ -298,8 +299,9 @@ int resource_choose_cpu(struct thread* td)
 	//First we need to know which of the cpu queues is sensitized
 	int transition_index;
 	int best = NOCPU;
+	int tid = (int) td->td_tid;
 
-	int monopolized_cpu = get_monopolized_cpu_by_thread_id(td->td_tid);
+	int monopolized_cpu = get_monopolized_cpu_by_thread_id(tid);
 	if (monopolized_cpu != -1) {
 		printf("CHOOSING MONOPOLIZED CPU: %d\n", monopolized_cpu);
 		best = monopolized_cpu;
@@ -310,7 +312,7 @@ int resource_choose_cpu(struct thread* td)
 		td->td_lastcpu != NOCPU &&
 		THREAD_CAN_SCHED(td, td->td_lastcpu) &&
 		transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS) &&
-		cpu_available_for_thread(td->td_tid, td->td_lastcpu)
+		cpu_available_for_thread(tid, td->td_lastcpu)
 	) {
 		best = td->td_lastcpu;
 		return best;
@@ -322,7 +324,7 @@ int resource_choose_cpu(struct thread* td)
 			int sensitized_transition_cpu = transition_index / CPU_BASE_TRANSITIONS;
 			if (
 				!THREAD_CAN_SCHED(td, sensitized_transition_cpu) ||
-				!cpu_available_for_thread(td->td_tid, sensitized_transition_cpu)
+				!cpu_available_for_thread(tid, sensitized_transition_cpu)
 			)
 				continue;
 			else {
@@ -440,10 +442,7 @@ int get_monopolized_cpu_by_thread_id (int thread_id) {
         if (pinned_threads_per_cpu[i] == thread_id) {
 			printf("la comparacion TRUE es %d == %d\n", pinned_threads_per_cpu[i], thread_id);
             return i;
-        } else {
-			printf("la comparacion FALSE es %d == %d\n", pinned_threads_per_cpu[i], thread_id);
-		}
-
+        }
     }
     return -1;
 }
