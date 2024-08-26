@@ -1360,23 +1360,28 @@ sched_add(struct thread *td, int flags)
     * as per-CPU state may not be initialized yet and we may crash if we
     * try to access the per-CPU run queues.
     */
-   	boundcpu = ts->ts_runq - &runq_pcpu[0];
-	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
-	    ts->ts_flags & TSF_AFFINITY)) {
-		if (td->td_pinned != 0 && transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS))
-			cpu = td->td_lastcpu;
-		// else if (td->td_flags & TDF_BOUND && transition_is_sensitized(boundcpu * CPU_BASE_TRANSITIONS)) {
-		// 	/* Find CPU from bound runq. */
-		// 	KASSERT(SKE_RUNQ_PCPU(ts),
-		// 	    ("sched_add: bound td_sched not on cpu runq"));
-		// 	cpu = boundcpu;
-		// }
-		else
-			cpu = sched_petrinet_pickcpu(td); /* Find a valid CPU for our cpuset */
+
+	boundcpu = ts->ts_runq - &runq_pcpu[0];
+
+	if (smp_started) {
+		cpu = sched_petrinet_pickcpu(td);
+		// TODO: Aca me parece que nos esta faltando la condicion de que el CPU pinned no este monopolizado por otro hilo
+		// TODO: Creo que hay que borrar esta condicion del pinned porque la estamos manejando directamente adentro del resource_choose_cpu (sched_petrinet_pickcpu)
+		// if (td->td_pinned != 0 && transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS))
+		// 	cpu = td->td_lastcpu;
+		// // else if (td->td_flags & TDF_BOUND && transition_is_sensitized(boundcpu * CPU_BASE_TRANSITIONS)) {
+		// // 	/* Find CPU from bound runq. */
+		// // 	KASSERT(SKE_RUNQ_PCPU(ts),
+		// // 	    ("sched_add: bound td_sched not on cpu runq"));
+		// // 	cpu = boundcpu;
+		// // }
+		// else
+		// 	cpu = sched_petrinet_pickcpu(td); /* Find a valid CPU for our cpuset */
 	}
 
 	if(cpu != NOCPU) {
 		ts->ts_runq = &runq_pcpu[cpu];
+		// * Cuando quieras hacer la add_to_queue de un pinned
 		resource_fire_net("sched_add", td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
 		single_cpu = 1;
 		CTR3(KTR_RUNQ,

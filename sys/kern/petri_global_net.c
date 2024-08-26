@@ -301,11 +301,44 @@ int resource_choose_cpu(struct thread* td)
 	int best = NOCPU;
 	int tid = (int) td->td_tid;
 
+
+	// ? Si esta pinned, deberiamos hacer el unpin? (sched_unpin)
+			// ? O si esta pinned deberia tener mas prioridad el pinned que el monopolized?
+			/**
+			 * * El unpin le deberia perder en prioridad al monopolized
+			 * * Esto es porque cada metodo que hace pin, tiene que obligatoriamente hace el unpin, entonces:
+			 * * 	* Nosotros hacer el unpin es algo que no deberiamos hacer! lo mas probable es que estemos haciendo que el pinned quede en -1 o robandole el pin a otro metodo
+			 * * 	* No nos preocupamos por el unpin por el momento. Cuando lo haga el metodo que lo pineo, ahi empieza a jugar el monopolized
+			 */
+	if (td->td_pinned != 0) {
+		// ! si la transicion de addtoqueue del cpu que estaba pineado no esta sensibilizada, tenemos un gran problema
+		// 		! si no chequeamos que este sensibilizada (y no lo estaba) error de intento de disparo no sensibilizado
+		// 		! si lo chequeamos, podriamos hacer que no se respete el pinned cpu que es causa de panics
+		printf("THREAD %d IS PINNED, CHOOSING CPU: %d\n", tid, PCPU_GET(cpuid));
+		best = td->td_lastcpu;
+		return best;
+	}
+
 	int monopolized_cpu = get_monopolized_cpu_by_thread_id(tid);
 	if (monopolized_cpu != -1) {
+		// ? Si esta bounded, deberiamos sacarle el bounded? (sched_unbind)
+		// ? Si tiene affinity, deberiamos sacarle la affinity?
+		/**
+		 * ! Each scheduler implementation is required to ensure that pinned threads are only executed on the CPU
+		 * ! that they were executing on when the sched_pin was first called.
+		 * ! https://docs.freebsd.org/en/books/arch-handbook/smp/
+		 * */
 		printf("CHOOSING MONOPOLIZED CPU: %d\n", monopolized_cpu);
 		best = monopolized_cpu;
 		return best;
+	}
+
+
+	else if (td->td_flags & TDF_BOUND) {
+
+	}
+	else if(ts->ts_flags & TSF_AFFINITY){
+
 	}
 
 	if (
