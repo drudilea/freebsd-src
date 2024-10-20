@@ -13,6 +13,18 @@ const int matrix_Incidence[PLACES_SIZE][TRANSITIONS_SIZE] = {
 
 const int initial_mark[PLACES_SIZE] = { 0, 1, 0, 0, 0 };
 
+const char *thread_transitions_names[] = {
+	"TRAN_INIT", "TRAN_ON_QUEUE", "TRAN_SET_RUNNING", "TRAN_SWITCH_OUT", "TRAN_TO_WAIT_CHANNEL", "TRAN_WAKEUP", "TRAN_REMOVE"
+};
+
+const char *thread_places[] = {
+	"INACTIVE", "CAN_RUN", "RUNQ", "RUNNING", "INHIBITED",
+};
+
+const char *thread_state_to_string[] = {
+	"INACTIVE", "INHIBITED", "CAN_RUN", "RUNQ", "RUNNING",
+};
+
 __inline int
 thread_transition_is_sensitized(struct thread *pt, int transition_index);
 
@@ -66,11 +78,9 @@ thread_petri_fire(struct thread *pt, int transition)
 		for(i=0; i< PLACES_SIZE; i++)
 			pt->mark[i] += matrix_Incidence[i][transition];
 	}
-	else
-	{
-		printf("Transition %2d no estaba sensibilizada para thread %d\n", transition, pt->td_tid);
-		thread_print_net(pt);
-		print_resource_net();	
+	else {
+		printf("!! %s - NON SENSITIZED THREAD transition: %2d - Thread %2d -> State %d !!\n", thread_transitions_names[transition], transition, pt->td_tid, pt->td_state);
+		thread_print_detailed_places(pt);
 	}
 }
 
@@ -96,5 +106,10 @@ void thread_print_net(struct thread *pt)
 	for(i=0; i< PLACES_SIZE; i++){
 		printf("%d ", pt->mark[i]);
 	}
-	printf("\n");
+}
+
+void thread_print_detailed_places(struct thread *pt) {
+	for (int i = 0; i < PLACES_SIZE; i++){
+		printf("#& %d -> %s &#\n", pt->mark[i], thread_places[i]);
+	}
 }
