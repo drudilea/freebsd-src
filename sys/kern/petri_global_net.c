@@ -28,36 +28,39 @@ struct petri_cpu_resource_net resource_net;
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base matrix */
-	{ 1, 0,-1, 0, 0, 0, 0,-1, 0},
-	{ 1,-1, 0, 0, 0, 0, 0,-1,-1},
-	{ 0,-1, 0, 0, 1, 1,-1, 0, 0},
-	{ 0, 1,-1,-1, 0, 0, 1, 0, 0},
-	{ 0, 0, 1, 1,-1,-1, 0, 0, 0}
+	{ 1, 0,-1, 0, 0, 0, 0, 0,-1, 0, 0, 0},
+	{ 1,-1, 0, 0, 0, 0, 0, 0,-1,-1, 0, 0},
+	{ 0,-1, 0, 0,-1, 1, 1,-1, 0, 0, 0, 0},
+	{ 0, 1,-1,-1, 1, 0, 0, 1, 0, 0, 0, 0},
+	{ 0, 0, 1, 1, 0,-1,-1, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1}
 };
 
 const int base_resource_inhibition_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base inhibition matrix */
-	{ 1, 0, 0, 1, 0, 0, 0, 0, 1},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	{ 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0},
+	{ 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0}
 };
 
 const char *transitions_names[] = {
-	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0",
-	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1",
-	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2",
-	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3",
+	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "EXEC_IDLE_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0", "SUSPEND_PROC_P0", "WAKEUP_PROC_P0",
+	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "EXEC_IDLE_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1", "SUSPEND_PROC_P1", "WAKEUP_PROC_P1",
+	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "EXEC_IDLE_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2", "SUSPEND_PROC_P2", "WAKEUP_PROC_P2",
+	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "EXEC_IDLE_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3", "SUSPEND_PROC_P3", "WAKEUP_PROC_P3",
 	"REMOVE_GLOBAL_QUEUE", "START_SMP", "THROW", "QUEUE_GLOBAL"
 };
 
 const char *cpu_places_names[] = { "CANTQ", "QUEUE", "CPU", "TOEXEC", "EXECUTING", "SUSPENDED" };
 
-const int hierarchical_transitions[] = { 
+const int hierarchical_transitions[] = {
 	TRAN_ADDTOQUEUE,
 	TRAN_EXEC,
 	TRAN_EXEC_EMPTY,
+	TRAN_EXEC_IDLE,
 	TRAN_RETURN_INVOL,
 	TRAN_RETURN_VOL,
 	TRAN_REMOVE_QUEUE,
@@ -66,10 +69,11 @@ const int hierarchical_transitions[] = {
 	TRAN_REMOVE_GLOBAL_QUEUE
 };
 
-const int hierarchical_corresponse[] = { 
+const int hierarchical_corresponse[] = {
 	TRAN_ON_QUEUE,
 	TRAN_SET_RUNNING,
 	TRAN_SET_RUNNING,
+	TRAN_ON_QUEUE,
 	TRAN_SWITCH_OUT,
 	TRAN_TO_WAIT_CHANNEL,
 	TRAN_REMOVE,
@@ -78,21 +82,23 @@ const int hierarchical_corresponse[] = {
 	TRAN_REMOVE
 };
 
-/* Extended matrix izq der                GLOBAL TRANSITIONS
-	{ 1, 0,-1, 0, 0, 0, 0,-1, 0},					  	       ,{ 0, 0, 0,-1, 0}
-	{ 1,-1, 0, 0, 0, 0, 0,-1,-1},					           ,{ 0, 0, 0, 0, 0}
-	{ 0,-1, 0, 0, 1, 1,-1, 0, 0},					           ,{ 0, 0, 0, 0, 0}
-	{ 0, 1,-1,-1, 0, 0, 1, 0, 0}					           ,{ 0,-1, 0, 0, 0}
-	{ 0, 0, 1, 1,-1,-1, 0, 0, 0}					           ,{ 0, 0, 0, 0, 0}
-						         { 1, 0,-1, 0, 0, 0, 0,-1, 0}, ,{ 0, 0, 0,-1, 0}
-							     { 1,-1, 0, 0, 0, 0, 0,-1,-1}, ,{ 0, 0, 0, 0, 0}
-							     { 0,-1, 0, 0, 1, 1,-1, 0, 0}, ,{ 0, 0, 0, 0, 0}
-							     { 0, 1,-1,-1, 0, 0, 1, 0, 0}  ,{ 0, 0, 0, 0, 0}
-							     { 0, 0, 1, 1,-1,-1, 0, 0, 0}  ,{ 0, 0, 0, 0, 0}
+/* Extended matrix izq der                									 			GLOBAL TRANSITIONS
+	{ 1, 0,-1, 0, 0, 0, 0, 0,-1, 0, 0, 0 },					  	       		 			,{ 0, 0,-1, 0}
+	{ 1,-1, 0, 0, 0, 0, 0, 0,-1,-1, 0, 0 },					           		 			,{ 0, 0, 0, 0}
+	{ 0,-1, 0, 0,-1, 1, 1,-1, 0, 0, 0, 0 },					           		 			,{ 0, 0, 0, 0}
+	{ 0, 1,-1,-1, 1, 0, 0, 1, 0, 0, 0, 0 }					           					,{ 0, 0, 0, 0}
+	{ 0, 0, 1, 1, 0,-1,-1, 0, 0, 0, 0, 0 }					           					,{ 0, 0, 0, 0}
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1 }					           					,{ 0, 0, 0, 0}
+						         			{ 1, 0,-1, 0, 0, 0, 0, 0,-1, 0, 0, 0 }, 	,{ 0, 0,-1, 0}
+							     			{ 1,-1, 0, 0, 0, 0, 0, 0,-1,-1, 0, 0 }, 	,{ 0, 0, 0, 0}
+							     			{ 0,-1, 0, 0,-1, 1, 1,-1, 0, 0, 0, 0 }, 	,{ 0, 0, 0, 0}
+							     			{ 0, 1,-1,-1, 1, 0, 0, 1, 0, 0, 0, 0 },		,{ 0, 0, 0, 0}
+							     			{ 0, 0, 1, 1, 0,-1,-1, 0, 0, 0, 0, 0 },		,{ 0, 0, 0, 0}
+							     			{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1 },		,{ 0, 0, 0, 0}
 	GLOBAL PLACE
-	{ 0, 0, 0, 0, 0, 0,-1, 0, 0} { 0, 0, 0, 0, 0, 0,-1, 0, 0}  ,{-1, 0, 0, 0, 1}
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0} { 0, 0, 0, 0, 0, 0, 0, 0, 0}  ,{ 0, 0,-1, 0, 0}
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0} { 0, 0, 0, 0, 0, 0, 0, 0, 0}  ,{ 0, 0, 1, 0, 0}
+	{ 0, 0, 0, 0, 0, 0, 0,-1, 0, 0, 0, 0 } 	{ 0, 0, 0, 0, 0, 0, 0,-1, 0, 0, 0, 0 }  	,{-1, 0, 0, 1}
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }  	,{ 0,-1, 0, 0}
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }  	,{ 0, 1, 0, 0}
 */
 
 static void resource_fire_single_transition(struct thread *pt, int transition_index);
@@ -182,6 +188,10 @@ void resource_get_sensitized()
 	}
 }
 
+int get_place_tokens_qty(int place_index)
+{
+	return resource_net.mark[place_index];
+}
 
 void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 {
@@ -350,4 +360,26 @@ void print_detailed_places() {
 
 void set_print_transition(int number_transitions) {
 	transitions_to_print = number_transitions;
+}
+
+void toggle_active_cpu(int cpu) {
+	if (cpu == 0) {
+		printf("toggle_active_cpu error - CPU 0 can not be turn off\n");
+		return;
+	}
+	else if (cpu >= CPU_NUMBER || cpu < 0) {
+		printf("toggle_active_cpu error - CPU %d does not exist\n", cpu);
+		return;
+	}
+
+	printf("TOGGLE ACTIVE/INACTIVE: CPU %d - Thread %2d\n", cpu, curthread->td_tid);
+	int tran_wakeup_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC;
+	int tran_suspend_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC;
+
+	if (transition_is_sensitized(tran_wakeup_index)){
+		resource_fire_net("toggle_active: wakeup", curthread, tran_wakeup_index);
+	}
+	else {
+		resource_fire_net("toggle_active: suspend", curthread, tran_suspend_index);
+	}
 }

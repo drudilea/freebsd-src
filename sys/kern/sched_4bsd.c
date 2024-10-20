@@ -267,13 +267,13 @@ SYSCTL_INT(_kern_sched, OID_AUTO, followon, CTLFLAG_RW,
 
 SDT_PROVIDER_DEFINE(sched);
 
-SDT_PROBE_DEFINE3(sched, , , change__pri, "struct thread *", 
+SDT_PROBE_DEFINE3(sched, , , change__pri, "struct thread *",
     "struct proc *", "uint8_t");
-SDT_PROBE_DEFINE3(sched, , , dequeue, "struct thread *", 
+SDT_PROBE_DEFINE3(sched, , , dequeue, "struct thread *",
     "struct proc *", "void *");
-SDT_PROBE_DEFINE4(sched, , , enqueue, "struct thread *", 
+SDT_PROBE_DEFINE4(sched, , , enqueue, "struct thread *",
     "struct proc *", "void *", "int");
-SDT_PROBE_DEFINE4(sched, , , lend__pri, "struct thread *", 
+SDT_PROBE_DEFINE4(sched, , , lend__pri, "struct thread *",
     "struct proc *", "uint8_t", "struct thread *");
 SDT_PROBE_DEFINE2(sched, , , load__change, "int", "int");
 SDT_PROBE_DEFINE2(sched, , , off__cpu, "struct thread *",
@@ -858,7 +858,7 @@ sched_priority(struct thread *td, u_char prio)
 		KTR_POINT3(KTR_SCHED, "thread", sched_tdname(curthread),
 		    "lend prio", "prio:%d", td->td_priority, "new prio:%d",
 		    prio, KTR_ATTR_LINKED, sched_tdname(td));
-		SDT_PROBE4(sched, , , lend__pri, td, td->td_proc, prio, 
+		SDT_PROBE4(sched, , , lend__pri, td, td->td_proc, prio,
 		    curthread);
 	}
 	THREAD_LOCK_ASSERT(td, MA_OWNED);
@@ -1315,7 +1315,7 @@ sched_add(struct thread *td, int flags)
 		thread_petri_fire(td, TRAN_WAKEUP);
 		td->td_frominh = 0;
 	}
-	
+
 	cpuset_t tidlemsk;
 	struct td_sched *ts;
 	u_int cpu = NOCPU, cpuid, boundcpu;
@@ -1336,7 +1336,7 @@ sched_add(struct thread *td, int flags)
 	    sched_tdname(curthread));
 	KTR_POINT1(KTR_SCHED, "thread", sched_tdname(curthread), "wokeup",
 	    KTR_ATTR_LINKED, sched_tdname(td));
-	SDT_PROBE4(sched, , , enqueue, td, td->td_proc, NULL, 
+	SDT_PROBE4(sched, , , enqueue, td, td->td_proc, NULL,
 	    flags & SRQ_PREEMPTED);
 
 	/*
@@ -1350,7 +1350,7 @@ sched_add(struct thread *td, int flags)
 		else
 			thread_lock_set(td, &sched_lock);
 	}
-    TD_SET_RUNQ(td); 
+    TD_SET_RUNQ(td);
     /*
     * If SMP is started and the thread is pinned or otherwise limited to
     * a specific set of CPUs, queue the thread to a per-CPU run queue.
@@ -1361,8 +1361,8 @@ sched_add(struct thread *td, int flags)
     * try to access the per-CPU run queues.
     */
    	boundcpu = ts->ts_runq - &runq_pcpu[0];
-	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
-	    ts->ts_flags & TSF_AFFINITY)) {
+	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND || 
+	ts->ts_flags & TSF_AFFINITY)) {
 		if (td->td_pinned != 0 && transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS))
 			cpu = td->td_lastcpu;
 		else
@@ -1430,7 +1430,7 @@ sched_add(struct thread *td, int flags)
 	    sched_tdname(curthread));
 	KTR_POINT1(KTR_SCHED, "thread", sched_tdname(curthread), "wokeup",
 	    KTR_ATTR_LINKED, sched_tdname(td));
-	SDT_PROBE4(sched, , , enqueue, td, td->td_proc, NULL, 
+	SDT_PROBE4(sched, , , enqueue, td, td->td_proc, NULL,
 	    flags & SRQ_PREEMPTED);
 
 	/*
@@ -1498,6 +1498,9 @@ sched_choose(void)
 {
 	struct thread *td;
 	struct runq *rq;
+	int is_cpu_suspended;
+
+	is_cpu_suspended = get_place_tokens_qty(PLACE_SUSPENDED + (PCPU_GET(cpuid)*CPU_BASE_PLACES));
 
 	mtx_assert(&sched_lock,  MA_OWNED);
 #ifdef SMP
@@ -1507,20 +1510,27 @@ sched_choose(void)
 	td = runq_choose_fuzz(&runq, runq_fuzz);
 	tdcpu = runq_choose(&runq_pcpu[PCPU_GET(cpuid)]);
 
-	if (td == NULL ||
-	    (tdcpu != NULL &&
-	     tdcpu->td_priority < td->td_priority)) {
+	if (is_cpu_suspended || td == NULL ||
+	    (tdcpu != NULL && tdcpu->td_priority < td->td_priority)) {
 		CTR2(KTR_RUNQ, "choosing td %p from pcpu runq %d", tdcpu,
-		     PCPU_GET(cpuid));
+		    PCPU_GET(cpuid));
 		td = tdcpu;
 		rq = &runq_pcpu[PCPU_GET(cpuid)];
 
 		if(td) {
-			resource_fire_net("sched_choose", td, TRAN_UNQUEUE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+			resource_fire_net("sched_choose_1", td, TRAN_UNQUEUE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+		}
+		else if (is_cpu_suspended){
+			if(PCPU_GET(idlethread)->td_frominh == 1) {
+				thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
+				PCPU_GET(idlethread)->td_frominh = 0;
+			}
+			resource_fire_net("sched_choose_4", PCPU_GET(idlethread), TRAN_EXEC_IDLE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+			return (PCPU_GET(idlethread));
 		}
 	} else{
 		CTR1(KTR_RUNQ, "choosing td_sched %p from main runq", td);
-		resource_fire_net("sched_choose", td, TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+		resource_fire_net("sched_choose_2", td, TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 	}
 
 #else
@@ -1545,8 +1555,7 @@ sched_choose(void)
 		thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
 		PCPU_GET(idlethread)->td_frominh = 0;
 	}
-	resource_fire_net("sched_choose", PCPU_GET(idlethread), TRAN_QUEUE_GLOBAL);
-	resource_fire_net("sched_choose", PCPU_GET(idlethread), TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+	resource_fire_net("sched_choose_3", PCPU_GET(idlethread), TRAN_EXEC_IDLE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 	return (PCPU_GET(idlethread));
 }
 
@@ -1773,7 +1782,7 @@ sched_tdname(struct thread *td)
 		snprintf(ts->ts_name, sizeof(ts->ts_name),
 		    "%s tid %d", td->td_name, td->td_tid);
 	return (ts->ts_name);
-#else   
+#else
 	return (td->td_name);
 #endif
 }
@@ -1796,7 +1805,7 @@ sched_affinity(struct thread *td)
 	struct td_sched *ts;
 	int cpu;
 
-	THREAD_LOCK_ASSERT(td, MA_OWNED);	
+	THREAD_LOCK_ASSERT(td, MA_OWNED);
 
 	/*
 	 * Set the TSF_AFFINITY flag if there is at least one CPU this
