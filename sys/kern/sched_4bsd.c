@@ -142,6 +142,7 @@ static void	resetpriority(struct thread *td);
 static void	resetpriority_thread(struct thread *td);
 #ifdef SMP
 static int	sched_pickcpu(struct thread *td);
+static int	sched_petrinet_pickcpu(struct thread *td);
 static int	forward_wakeup(int cpunum);
 static void	kick_other_cpu(int pri, int cpuid);
 #endif
@@ -1272,17 +1273,36 @@ kick_other_cpu(int pri, int cpuid)
 static int
 sched_pickcpu(struct thread *td)
 {
-	int transition, cpu;
+	int best, cpu;
 
 	mtx_assert(&sched_lock, MA_OWNED);
 
-	transition = resource_choose_cpu(td);
-
-	if (transition == TRAN_QUEUE_GLOBAL || transition == -1)
-		cpu = NOCPU;
+	if (td->td_lastcpu != NOCPU && THREAD_CAN_SCHED(td, td->td_lastcpu))
+		best = td->td_lastcpu;
 	else
-		cpu = (int)(transition / CPU_BASE_TRANSITIONS);
+		best = NOCPU;
+	CPU_FOREACH (cpu) {
+		if (!THREAD_CAN_SCHED(td, cpu))
+			continue;
 
+		if (best == NOCPU)
+			best = cpu;
+		else if (runq_length[cpu] < runq_length[best])
+			best = cpu;
+	}
+	KASSERT(best != NOCPU, ("no valid CPUs"));
+
+	return (best);
+}
+#endif
+
+#ifdef SMP
+static int
+sched_petrinet_pickcpu(struct thread *td)
+{
+	int cpu;
+	mtx_assert(&sched_lock, MA_OWNED);
+	cpu = resource_choose_cpu(td);
 	return (cpu);
 }
 #endif
@@ -1298,7 +1318,7 @@ sched_add(struct thread *td, int flags)
 	
 	cpuset_t tidlemsk;
 	struct td_sched *ts;
-	u_int cpu, cpuid;
+	u_int cpu = NOCPU, cpuid, boundcpu;
 	int forwarded = 0;
 	int single_cpu = 0;
 
@@ -1339,14 +1359,27 @@ sched_add(struct thread *td, int flags)
     * If SMP has not yet been started we must use the global run queue
     * as per-CPU state may not be initialized yet and we may crash if we
     * try to access the per-CPU run queues.
-    */	
-	cpu = sched_pickcpu(td);
-	if (cpu != NOCPU) {
-		ts->ts_runq = &runq_pcpu[cpu];
-		single_cpu = 1;
-		resource_fire_net("sched_add", td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
+    */
+   	boundcpu = ts->ts_runq - &runq_pcpu[0];
+	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
+	    ts->ts_flags & TSF_AFFINITY)) {
+		if (td->td_pinned != 0 && transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS))
+			cpu = td->td_lastcpu;
+		else
+			cpu = sched_petrinet_pickcpu(td); /* Find a valid CPU for our cpuset */
 	}
-	else {
+
+	if(cpu != NOCPU) {
+		ts->ts_runq = &runq_pcpu[cpu];
+		resource_fire_net("sched_add", td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
+		single_cpu = 1;
+		CTR3(KTR_RUNQ,
+			"sched_add: Put td_sched:%p(td:%p) on cpu%d runq", ts, td,
+			cpu);
+	} else {
+		CTR2(KTR_RUNQ,
+		    "sched_add: adding td_sched:%p (td:%p) to gbl runq", ts,
+		    td);
 		ts->ts_runq = &runq;
 		resource_fire_net("sched_add", td, TRAN_QUEUE_GLOBAL);
 	}
