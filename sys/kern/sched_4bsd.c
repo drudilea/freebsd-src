@@ -1012,6 +1012,20 @@ sched_switch(struct thread *td, int flags)
 	td->td_owepreempt = 0;
 	td->td_oncpu = NOCPU;
 
+	/*
+	 * Switch to the sched lock to fix things up and pick
+	 * a new thread.  Block the td_lock in order to avoid
+	 * breaking the critical path.
+	 */
+	if (td->td_lock != &sched_lock) {
+		mtx_lock_spin(&sched_lock);
+		tmtx = thread_lock_block(td);
+		mtx_unlock_spin(tmtx);
+	}
+
+	if ((td->td_flags & TDF_NOLOAD) == 0)
+		sched_load_rem();
+
 	resource_expulse_thread(td, flags);
 
 	/*
@@ -1034,23 +1048,8 @@ sched_switch(struct thread *td, int flags)
 		}
 	}
 
-	/* 
-	 * Switch to the sched lock to fix things up and pick
-	 * a new thread.  Block the td_lock in order to avoid
-	 * breaking the critical path.
-	 */
-	if (td->td_lock != &sched_lock) {
-		mtx_lock_spin(&sched_lock);
-		tmtx = thread_lock_block(td);
-		mtx_unlock_spin(tmtx);
-	}
-	
-	resource_execute_thread(newtd, PCPU_GET(cpuid));
-
-	if ((td->td_flags & TDF_NOLOAD) == 0)
-		sched_load_rem();
-
 	newtd = choosethread();
+	resource_execute_thread(newtd, PCPU_GET(cpuid));
 	MPASS(newtd->td_lock == &sched_lock);
 
 #if (KTR_COMPILE & KTR_SCHED) != 0
@@ -1278,8 +1277,8 @@ sched_pickcpu(struct thread *td)
 
 	transition = resource_choose_cpu(td);
 
-	if (transition == TRAN_QUEUE_GLOBAL)
-		cpu = -1;
+	if (transition == TRAN_QUEUE_GLOBAL || transition == -1)
+		cpu = NOCPU;
 	else
 		cpu = (int)(transition / CPU_BASE_TRANSITIONS);
 
@@ -1344,11 +1343,11 @@ sched_add(struct thread *td, int flags)
 	if (cpu != NOCPU) {
 		ts->ts_runq = &runq_pcpu[cpu];
 		single_cpu = 1;
-		resource_fire_net(td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
+		resource_fire_net("sched_add", td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
 	}
 	else {
 		ts->ts_runq = &runq;
-		resource_fire_net(td, TRAN_QUEUE_GLOBAL);
+		resource_fire_net("sched_add", td, TRAN_QUEUE_GLOBAL);
 	}
 
 	if ((td->td_flags & TDF_NOLOAD) == 0)
@@ -1449,7 +1448,7 @@ sched_rem(struct thread *td)
 		resource_remove_thread(td, (ts->ts_runq - runq_pcpu));
 	}
 	else {
-		resource_fire_net(td, TRAN_REMOVE_GLOBAL_QUEUE);
+		resource_fire_net("sched_rem", td, TRAN_REMOVE_GLOBAL_QUEUE);
 	}
 #endif
 	runq_remove(ts->ts_runq, td);
@@ -1483,11 +1482,11 @@ sched_choose(void)
 		rq = &runq_pcpu[PCPU_GET(cpuid)];
 
 		if(td) {
-			resource_fire_net(td, TRAN_UNQUEUE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+			resource_fire_net("sched_choose", td, TRAN_UNQUEUE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 		}
 	} else{
 		CTR1(KTR_RUNQ, "choosing td_sched %p from main runq", td);
-		resource_fire_net(td, TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+		resource_fire_net("sched_choose", td, TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 	}
 
 #else
@@ -1512,8 +1511,8 @@ sched_choose(void)
 		thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
 		PCPU_GET(idlethread)->td_frominh = 0;
 	}
-	resource_fire_net(PCPU_GET(idlethread), TRAN_QUEUE_GLOBAL);
-	resource_fire_net(PCPU_GET(idlethread), TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+	resource_fire_net("sched_choose", PCPU_GET(idlethread), TRAN_QUEUE_GLOBAL);
+	resource_fire_net("sched_choose", PCPU_GET(idlethread), TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 	return (PCPU_GET(idlethread));
 }
 
