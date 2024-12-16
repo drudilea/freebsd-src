@@ -1,0 +1,11 @@
+# PI KERNELCONF --
+# Drudi/Goldman Thesis kernel configuration file for FreeBSD/arm64
+
+include     GENERIC
+ident       PI_ARM_KERNELCONF
+options     SCHED_4BSD
+nooptions   SCHED_ULE
+
+options		DDB
+options		GDB
+options		KDB_UNATTENDED
