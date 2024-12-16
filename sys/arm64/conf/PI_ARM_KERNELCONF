@@ -6,6 +6,7 @@ ident       PI_ARM_KERNELCONF
 options     SCHED_4BSD
 nooptions   SCHED_ULE
 
-options		DDB
-options		GDB
-options		KDB_UNATTENDED
+options     KDB
+options     DDB
+options     KDB_UNATTENDED
+options     GDB
