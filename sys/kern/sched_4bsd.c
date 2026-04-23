@@ -1528,8 +1528,14 @@ sched_choose(void)
 			resource_fire_net("sched_choose", td, TRAN_UNQUEUE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
 		}
 	} else{
-		CTR1(KTR_RUNQ, "choosing td_sched %p from main runq", td);
-		resource_fire_net("sched_choose", td, TRAN_FROM_GLOBAL_CPU + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
+		if (cpu_available_for_thread(td->td_tid, PCPU_GET(cpuid))) {
+			CTR1(KTR_RUNQ, "choosing td_sched %p from main runq", td);
+			resource_fire_net("sched_choose", td,
+			    TRAN_FROM_GLOBAL_CPU +
+			    (PCPU_GET(cpuid) * CPU_BASE_TRANSITIONS));
+		} else {
+			td = NULL;
+		}
 	}
 
 #else

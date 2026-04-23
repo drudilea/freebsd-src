@@ -70,5 +70,8 @@ void resource_execute_thread(struct thread *newtd, int cpu);
 void resource_remove_thread(struct thread *newtd, int cpu);
 void print_detailed_places(void);
 void set_print_transition(int transitions_to_print);
+void toggle_pin_thread_to_cpu(int thread_id, int cpu);
+int cpu_available_for_thread(int thread_id, int cpu);
+int get_monopolized_cpu_by_thread_id(int thread_id);
 
 #endif

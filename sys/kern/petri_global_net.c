@@ -25,6 +25,7 @@ int smp_set = 0;
 int print_enabled = 1;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
+static int pinned_threads_per_cpu[CPU_NUMBER] = { -1, -1, -1, -1 };
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base matrix */
@@ -276,11 +277,17 @@ int resource_choose_cpu(struct thread* td)
 	//First we need to know which of the cpu queues is sensitized
 	int transition_index;
 	int best = NOCPU;
+	int tid = (int)td->td_tid;
+
+	best = get_monopolized_cpu_by_thread_id(tid);
+	if (best != NOCPU)
+		return (best);
 
 	if (
 		td->td_lastcpu != NOCPU &&
 		THREAD_CAN_SCHED(td, td->td_lastcpu) &&
-		transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)
+		transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS) &&
+		cpu_available_for_thread(tid, td->td_lastcpu)
 	) {
 		best = td->td_lastcpu;
 		return best;
@@ -289,10 +296,14 @@ int resource_choose_cpu(struct thread* td)
 	//Only check for transitions of addtoqueue
 	for (transition_index = TRAN_ADDTOQUEUE; transition_index < CPU_NUMBER_TRANSITION-4; transition_index += CPU_BASE_TRANSITIONS) {
 		if (transition_is_sensitized(transition_index)) {
-			if (!THREAD_CAN_SCHED(td, (transition_index / CPU_BASE_TRANSITIONS)))
+			int target_cpu;
+
+			target_cpu = transition_index / CPU_BASE_TRANSITIONS;
+			if (!THREAD_CAN_SCHED(td, target_cpu) ||
+			    !cpu_available_for_thread(tid, target_cpu))
 				continue;
 			else {
-				best = (transition_index / CPU_BASE_TRANSITIONS);
+				best = target_cpu;
 				break;
 			}
 		}
@@ -350,4 +361,39 @@ void print_detailed_places() {
 
 void set_print_transition(int number_transitions) {
 	transitions_to_print = number_transitions;
+}
+
+void
+toggle_pin_thread_to_cpu(int thread_id, int cpu)
+{
+
+	if (cpu <= 0 || cpu >= CPU_NUMBER ||
+	    !cpu_available_for_thread(thread_id, cpu))
+		return;
+
+	if (pinned_threads_per_cpu[cpu] == thread_id)
+		pinned_threads_per_cpu[cpu] = -1;
+	else
+		pinned_threads_per_cpu[cpu] = thread_id;
+}
+
+int
+cpu_available_for_thread(int thread_id, int cpu)
+{
+
+	return (pinned_threads_per_cpu[cpu] == thread_id ||
+	    pinned_threads_per_cpu[cpu] == -1);
+}
+
+int
+get_monopolized_cpu_by_thread_id(int thread_id)
+{
+	int cpu;
+
+	for (cpu = 0; cpu < CPU_NUMBER; cpu++) {
+		if (pinned_threads_per_cpu[cpu] == thread_id)
+			return (cpu);
+	}
+
+	return (NOCPU);
 }
