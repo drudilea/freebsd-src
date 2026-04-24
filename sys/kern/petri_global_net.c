@@ -12,6 +12,7 @@
 #include <sys/param.h>
 #include <sys/cpuset.h>
 #include <sys/smp.h>
+#include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/sched_petri.h>
 
@@ -98,6 +99,19 @@ const int hierarchical_corresponse[] = {
 static void resource_fire_single_transition(struct thread *pt, int transition_index);
 static int get_automatic_transitions_sensitized(void);
 
+int
+resource_valid_cpu(int cpu)
+{
+	return (cpu >= 0 && cpu < CPU_NUMBER);
+}
+
+int
+resource_valid_transition(int transition_index)
+{
+	return (transition_index >= 0 &&
+	    transition_index < CPU_NUMBER_TRANSITION);
+}
+
 void init_resource_net()
 {
 	int num_cpu;
@@ -183,31 +197,39 @@ void resource_get_sensitized()
 }
 
 
-void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
+void resource_fire_net(const char *trigger, struct thread *pt,
+    int transition_index)
 {
-	if(pt) {
-		int automatic_transition;
+	int automatic_transition;
 
-		if(!smp_set && smp_started) {
-			smp_set = 1;
-			resource_fire_single_transition(pt, TRAN_START_SMP);
-		}
+	if (pt == NULL)
+		return;
 
-		if(transition_is_sensitized(transition_index)) {
-			resource_fire_single_transition(pt, transition_index);
+	if (!resource_valid_transition(transition_index)) {
+		panic("petri: invalid resource transition %d from %s, td %p "
+		    "tid %d lastcpu %d oncpu %d", transition_index, trigger,
+		    pt, pt->td_tid, pt->td_lastcpu, pt->td_oncpu);
+	}
+
+	if(!smp_set && smp_started) {
+		smp_set = 1;
+		resource_fire_single_transition(pt, TRAN_START_SMP);
+	}
+
+	if(transition_is_sensitized(transition_index)) {
+		resource_fire_single_transition(pt, transition_index);
+		automatic_transition = get_automatic_transitions_sensitized();
+		while (automatic_transition != -1) {
+			resource_fire_single_transition(pt, automatic_transition);
 			automatic_transition = get_automatic_transitions_sensitized();
-			while (automatic_transition != -1) {
-				resource_fire_single_transition(pt, automatic_transition);
-				automatic_transition = get_automatic_transitions_sensitized();
-			}
 		}
-		else {
-			if(print_enabled) {
-				// TODO: Add a kernel panic exit here. We don't care about post error transitions
-				printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
-				print_detailed_places();
-				transitions_to_print = 0;
-			}
+	}
+	else {
+		if(print_enabled) {
+			// TODO: Add a kernel panic exit here. We don't care about post error transitions
+			printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
+			print_detailed_places();
+			transitions_to_print = 0;
 		}
 	}
 
@@ -221,6 +243,12 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 static void resource_fire_single_transition(struct thread *pt, int transition_index) {
 	int num_place;
 	int local_transition;
+
+	if (!resource_valid_transition(transition_index)) {
+		panic("petri: invalid single resource transition %d, td %p "
+		    "tid %d", transition_index, pt, pt != NULL ? pt->td_tid :
+		    -1);
+	}
 
 	//Fire cpu net
 	for (num_place = 0; num_place< CPU_NUMBER_PLACES; num_place++) {
@@ -257,6 +285,10 @@ int transition_is_sensitized(int transition_index)
 {
 	int places_index;
 
+	if (!resource_valid_transition(transition_index))
+		panic("petri: invalid transition_is_sensitized index %d",
+		    transition_index);
+
 	for (places_index = 0; places_index < CPU_NUMBER_PLACES; places_index++) {
 
 		if (((resource_net.incidence_matrix[places_index][transition_index] < 0) &&
@@ -277,10 +309,16 @@ int resource_choose_cpu(struct thread* td)
 	int transition_index;
 	int best = NOCPU;
 
+	if (td->td_lastcpu != NOCPU && !resource_valid_cpu(td->td_lastcpu)) {
+		panic("petri: invalid lastcpu %d in resource_choose_cpu, td %p "
+		    "tid %d", td->td_lastcpu, td, td->td_tid);
+	}
+
 	if (
 		td->td_lastcpu != NOCPU &&
-		THREAD_CAN_SCHED(td, td->td_lastcpu) &&
-		transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)
+			resource_valid_cpu(td->td_lastcpu) &&
+			THREAD_CAN_SCHED(td, td->td_lastcpu) &&
+			transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)
 	) {
 		best = td->td_lastcpu;
 		return best;
@@ -304,6 +342,12 @@ int resource_choose_cpu(struct thread* td)
 void resource_expulse_thread(struct thread *td, int flags) {
 	int transition_number;
 
+	if (!resource_valid_cpu(td->td_lastcpu)) {
+		panic("petri: invalid lastcpu %d in resource_expulse_thread, "
+		    "td %p tid %d flags %#x", td->td_lastcpu, td, td->td_tid,
+		    flags);
+	}
+
 	if (flags & (SW_VOL)) {
 		transition_number = (td->td_lastcpu * CPU_BASE_TRANSITIONS) + TRAN_RETURN_VOL;
 		(td)->td_frominh = 1;
@@ -318,6 +362,12 @@ void resource_expulse_thread(struct thread *td, int flags) {
 void resource_execute_thread(struct thread *newtd, int cpu) {
 	int transition_number;
 
+	if (!resource_valid_cpu(cpu)) {
+		panic("petri: invalid cpu %d in resource_execute_thread, "
+		    "td %p tid %d", cpu, newtd, newtd != NULL ? newtd->td_tid :
+		    -1);
+	}
+
 	if(transition_is_sensitized((cpu * CPU_BASE_TRANSITIONS)+ TRAN_EXEC))
 		transition_number = (cpu * CPU_BASE_TRANSITIONS) + TRAN_EXEC;
 	else
@@ -328,6 +378,11 @@ void resource_execute_thread(struct thread *newtd, int cpu) {
 
 void resource_remove_thread(struct thread *newtd, int cpu) {
 	int transition_number;
+
+	if (!resource_valid_cpu(cpu)) {
+		panic("petri: invalid cpu %d in resource_remove_thread, td %p "
+		    "tid %d", cpu, newtd, newtd != NULL ? newtd->td_tid : -1);
+	}
 
 	if(transition_is_sensitized((cpu * CPU_BASE_TRANSITIONS)+ TRAN_REMOVE_QUEUE))
 		transition_number = (cpu * CPU_BASE_TRANSITIONS) + TRAN_REMOVE_QUEUE;

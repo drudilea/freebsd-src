@@ -1,3 +1,5 @@
+#include <sys/param.h>
+#include <sys/systm.h>
 #include <sys/sched_petri.h>
 
 /*
@@ -28,6 +30,12 @@ const char *thread_state_to_string[] = {
 __inline int
 thread_transition_is_sensitized(struct thread *pt, int transition_index);
 
+static __inline int
+thread_valid_transition(int transition_index)
+{
+	return (transition_index >= 0 && transition_index < TRANSITIONS_SIZE);
+}
+
 
 void
 init_petri_thread(struct thread *pt_thread){
@@ -56,6 +64,13 @@ thread_transition_is_sensitized(struct thread *pt, int transition_index)
 {
 	int places_index;
 
+	if (pt == NULL)
+		panic("petri thread: null thread in transition_is_sensitized");
+	if (!thread_valid_transition(transition_index)) {
+		panic("petri thread: invalid transition index %d, td %p",
+		    transition_index, pt);
+	}
+
 	for (places_index = 0; places_index < PLACES_SIZE; places_index++) {
 
 		if (((matrix_Incidence[places_index][transition_index] < 0) && 
@@ -80,6 +95,14 @@ void
 thread_petri_fire(struct thread *pt, int transition)
 {
 	int i;
+
+	if (pt == NULL)
+		panic("petri thread: null thread in thread_petri_fire");
+	if (!thread_valid_transition(transition)) {
+		panic("petri thread: invalid fire transition %d, td %p tid %d "
+		    "state %d", transition, pt, pt->td_tid, pt->td_state);
+	}
+
 	if(thread_transition_is_sensitized(pt, transition)){
 		for(i=0; i< PLACES_SIZE; i++)
 			pt->mark[i] += matrix_Incidence[i][transition];
@@ -97,7 +120,7 @@ thread_search_and_fire(struct thread *pt){
 	int i;
 	thread_get_sensitized(pt);
 	i=0;
-	while((pt->sensitized_buffer[i] != 1) && (i < TRANSITIONS_SIZE)){
+	while((i < TRANSITIONS_SIZE) && (pt->sensitized_buffer[i] != 1)){
 		i++;
 	}
 	if(i < TRANSITIONS_SIZE){

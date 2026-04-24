@@ -1318,7 +1318,7 @@ sched_add(struct thread *td, int flags)
 	
 	cpuset_t tidlemsk;
 	struct td_sched *ts;
-	u_int cpu = NOCPU, cpuid, boundcpu;
+	u_int cpu = NOCPU, cpuid;
 	int forwarded = 0;
 	int single_cpu = 0;
 
@@ -1360,13 +1360,34 @@ sched_add(struct thread *td, int flags)
     * as per-CPU state may not be initialized yet and we may crash if we
     * try to access the per-CPU run queues.
     */
-   	boundcpu = ts->ts_runq - &runq_pcpu[0];
 	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
 	    ts->ts_flags & TSF_AFFINITY)) {
-		if (td->td_pinned != 0 && transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS))
+		if (td->td_pinned != 0 && td->td_lastcpu != NOCPU &&
+		    resource_valid_cpu(td->td_lastcpu) &&
+		    transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS))
 			cpu = td->td_lastcpu;
-		else
+		else if (td->td_flags & TDF_BOUND) {
+			/* Find CPU from bound runq, preserving stock 4BSD semantics. */
+			if (!SKE_RUNQ_PCPU(ts)) {
+				panic("sched_add: bound td_sched not on cpu "
+				    "runq, td %p tid %d runq %p", td,
+				    td->td_tid, ts->ts_runq);
+			}
+			cpu = ts->ts_runq - &runq_pcpu[0];
+			if (!resource_valid_cpu(cpu)) {
+				panic("sched_add: invalid bound cpu %u, td %p "
+				    "tid %d", cpu, td, td->td_tid);
+			}
+		}
+		else {
 			cpu = sched_petrinet_pickcpu(td); /* Find a valid CPU for our cpuset */
+			if (cpu == NOCPU)
+				cpu = sched_pickcpu(td);
+		}
+		if (!resource_valid_cpu(cpu)) {
+			panic("sched_add: invalid selected cpu %u, td %p "
+			    "tid %d", cpu, td, td->td_tid);
+		}
 	}
 
 	if(cpu != NOCPU) {
@@ -1478,8 +1499,19 @@ sched_rem(struct thread *td)
 		sched_load_rem();
 #ifdef SMP
 	if (ts->ts_runq != &runq) {
-		runq_length[ts->ts_runq - runq_pcpu]--;
-		resource_remove_thread(td, (ts->ts_runq - runq_pcpu));
+		int cpu;
+
+		if (!SKE_RUNQ_PCPU(ts)) {
+			panic("sched_rem: td_sched not on cpu runq, td %p "
+			    "tid %d runq %p", td, td->td_tid, ts->ts_runq);
+		}
+		cpu = ts->ts_runq - runq_pcpu;
+		if (!resource_valid_cpu(cpu)) {
+			panic("sched_rem: invalid cpu runq %d, td %p tid %d",
+			    cpu, td, td->td_tid);
+		}
+		runq_length[cpu]--;
+		resource_remove_thread(td, cpu);
 	}
 	else {
 		resource_fire_net("sched_rem", td, TRAN_REMOVE_GLOBAL_QUEUE);

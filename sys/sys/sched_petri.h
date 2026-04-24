@@ -62,8 +62,11 @@ void thread_print_detailed_places(struct thread *pt);
 //Petri Global Methods
 void init_resource_net(void);
 void resource_get_sensitized(void);
-void resource_fire_net(char *trigger, struct thread *pt, int transition_index);
+void resource_fire_net(const char *trigger, struct thread *pt,
+    int transition_index);
 int transition_is_sensitized(int transition_index);
+int resource_valid_cpu(int cpu);
+int resource_valid_transition(int transition_index);
 int resource_choose_cpu(struct thread *td);
 void resource_expulse_thread(struct thread *td, int flags);
 void resource_execute_thread(struct thread *newtd, int cpu);

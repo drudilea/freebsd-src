@@ -95,6 +95,11 @@ options 	KDB_TRACE		# Print a stack trace for a panic.
 options		DDB
 options		GDB
 options		KDB_UNATTENDED
+options 	INVARIANTS
+options 	INVARIANT_SUPPORT
+options 	DIAGNOSTIC
+options 	WITNESS
+options 	WITNESS_SKIPSPIN
 
 # Kernel Sanitizers
 #options 	COVERAGE		# Generic kernel coverage. Used by KCOV
