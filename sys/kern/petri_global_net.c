@@ -387,7 +387,7 @@ sysctl_sched_petri_cpu_toggle(SYSCTL_HANDLER_ARGS)
 	if (cpu <= 0 || cpu >= CPU_NUMBER)
 		return (EINVAL);
 
-	toggle_active_cpu(cpu);
+	sched_petri_toggle_cpu(cpu);
 	return (0);
 }
 

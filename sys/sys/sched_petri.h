@@ -74,6 +74,7 @@ void resource_remove_thread(struct thread *newtd, int cpu);
 void print_detailed_places(void);
 void set_print_transition(int transitions_to_print);
 void toggle_active_cpu(int cpu);
+void sched_petri_toggle_cpu(int cpu);
 int get_place_tokens_qty(int place_index);
 
 #endif

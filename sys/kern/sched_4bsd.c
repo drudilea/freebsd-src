@@ -1305,6 +1305,14 @@ sched_petrinet_pickcpu(struct thread *td)
 	cpu = resource_choose_cpu(td);
 	return (cpu);
 }
+
+void
+sched_petri_toggle_cpu(int cpu)
+{
+	mtx_lock_spin(&sched_lock);
+	toggle_active_cpu(cpu);
+	mtx_unlock_spin(&sched_lock);
+}
 #endif
 
 void
@@ -1519,7 +1527,17 @@ sched_choose(void)
 	td = runq_choose_fuzz(&runq, runq_fuzz);
 	tdcpu = runq_choose(&runq_pcpu[PCPU_GET(cpuid)]);
 
-	if (is_cpu_suspended || td == NULL ||
+	if (is_cpu_suspended) {
+		if(PCPU_GET(idlethread)->td_frominh == 1) {
+			thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
+			PCPU_GET(idlethread)->td_frominh = 0;
+		}
+		resource_fire_net("sched_choose_4", PCPU_GET(idlethread),
+		    TRAN_EXEC_IDLE + (PCPU_GET(cpuid) * CPU_BASE_TRANSITIONS));
+		return (PCPU_GET(idlethread));
+	}
+
+	if (td == NULL ||
 	    (tdcpu != NULL && tdcpu->td_priority < td->td_priority)) {
 		CTR2(KTR_RUNQ, "choosing td %p from pcpu runq %d", tdcpu,
 		    PCPU_GET(cpuid));
@@ -1528,14 +1546,6 @@ sched_choose(void)
 
 		if(td) {
 			resource_fire_net("sched_choose_1", td, TRAN_UNQUEUE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
-		}
-		else if (is_cpu_suspended){
-			if(PCPU_GET(idlethread)->td_frominh == 1) {
-				thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
-				PCPU_GET(idlethread)->td_frominh = 0;
-			}
-			resource_fire_net("sched_choose_4", PCPU_GET(idlethread), TRAN_EXEC_IDLE + (PCPU_GET(cpuid)*CPU_BASE_TRANSITIONS));
-			return (PCPU_GET(idlethread));
 		}
 	} else{
 		CTR1(KTR_RUNQ, "choosing td_sched %p from main runq", td);
