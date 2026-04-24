@@ -38,7 +38,7 @@ const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 
 const int base_resource_inhibition_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base inhibition matrix */
-	{ 1, 0, 0, 1, 0, 0, 0, 0, 1},
+	{ 0, 0, 0, 1, 0, 0, 0, 0, 1},
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -225,12 +225,12 @@ void resource_fire_net(const char *trigger, struct thread *pt,
 		}
 	}
 	else {
-		if(print_enabled) {
-			// TODO: Add a kernel panic exit here. We don't care about post error transitions
-			printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
-			print_detailed_places();
-			transitions_to_print = 0;
-		}
+		print_detailed_places();
+		panic("petri: non-sensitized resource transition %s(%d) "
+		    "from %s, td %p tid %d cpu %d lastcpu %d",
+		    transitions_names[transition_index], transition_index,
+		    trigger, pt, pt->td_tid, PCPU_GET(cpuid),
+		    pt->td_lastcpu);
 	}
 
 	for(int i=0; i<4; i++){

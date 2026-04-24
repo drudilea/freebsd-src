@@ -108,8 +108,10 @@ thread_petri_fire(struct thread *pt, int transition)
 			pt->mark[i] += matrix_Incidence[i][transition];
 	}
 	else {
-		printf("!! %s - NON SENSITIZED THREAD transition: %2d - Thread %2d -> State %d !!\n", thread_transitions_names[transition], transition, pt->td_tid, pt->td_state);
 		thread_print_detailed_places(pt);
+		panic("petri thread: non-sensitized transition %s(%d), "
+		    "td %p tid %d state %d", thread_transitions_names[transition],
+		    transition, pt, pt->td_tid, pt->td_state);
 	}
 }
 
