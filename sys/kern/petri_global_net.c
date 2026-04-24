@@ -9,9 +9,13 @@
  */
 
 #include <sys/types.h>
+#include <sys/errno.h>
 #include <sys/param.h>
 #include <sys/cpuset.h>
+#include <sys/kernel.h>
 #include <sys/smp.h>
+#include <sys/sysctl.h>
+#include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/sched_petri.h>
 
@@ -98,6 +102,14 @@ const int hierarchical_corresponse[] = {
 
 static void resource_fire_single_transition(struct thread *pt, int transition_index);
 static int get_automatic_transitions_sensitized(void);
+static int sysctl_sched_petri_monopolize(SYSCTL_HANDLER_ARGS);
+
+SYSCTL_NODE(_kern, OID_AUTO, sched_petri, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
+    "Petri-net scheduler controls");
+SYSCTL_PROC(_kern_sched_petri, OID_AUTO, monopolize,
+    CTLTYPE_STRING | CTLFLAG_RW | CTLFLAG_MPSAFE, 0, 0,
+    sysctl_sched_petri_monopolize, "A",
+    "Toggle monopolization for a thread/cpu pair using tid:cpu");
 
 void init_resource_net()
 {
@@ -361,6 +373,27 @@ void print_detailed_places() {
 
 void set_print_transition(int number_transitions) {
 	transitions_to_print = number_transitions;
+}
+
+static int
+sysctl_sched_petri_monopolize(SYSCTL_HANDLER_ARGS)
+{
+	char input[32];
+	int cpu;
+	int error;
+	int thread_id;
+
+	input[0] = '\0';
+	error = sysctl_handle_string(oidp, input, sizeof(input), req);
+	if (error != 0 || req->newptr == NULL)
+		return (error);
+	if (sscanf(input, "%d:%d", &thread_id, &cpu) != 2)
+		return (EINVAL);
+	if (thread_id <= 0 || cpu <= 0 || cpu >= CPU_NUMBER)
+		return (EINVAL);
+
+	toggle_pin_thread_to_cpu(thread_id, cpu);
+	return (0);
 }
 
 void
