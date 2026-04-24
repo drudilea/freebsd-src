@@ -9,9 +9,13 @@
  */
 
 #include <sys/types.h>
+#include <sys/errno.h>
 #include <sys/param.h>
 #include <sys/cpuset.h>
+#include <sys/kernel.h>
 #include <sys/smp.h>
+#include <sys/sysctl.h>
+#include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/sched_petri.h>
 
@@ -103,6 +107,14 @@ const int hierarchical_corresponse[] = {
 
 static void resource_fire_single_transition(struct thread *pt, int transition_index);
 static int get_automatic_transitions_sensitized(void);
+static int sysctl_sched_petri_cpu_toggle(SYSCTL_HANDLER_ARGS);
+
+SYSCTL_NODE(_kern, OID_AUTO, sched_petri, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
+    "Petri-net scheduler controls");
+SYSCTL_PROC(_kern_sched_petri, OID_AUTO, cpu_toggle,
+    CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_MPSAFE, 0, 0,
+    sysctl_sched_petri_cpu_toggle, "I",
+    "Toggle the Petri-net scheduler state for a CPU by id");
 
 void init_resource_net()
 {
@@ -360,6 +372,23 @@ void print_detailed_places() {
 
 void set_print_transition(int number_transitions) {
 	transitions_to_print = number_transitions;
+}
+
+static int
+sysctl_sched_petri_cpu_toggle(SYSCTL_HANDLER_ARGS)
+{
+	int cpu;
+	int error;
+
+	cpu = -1;
+	error = sysctl_handle_int(oidp, &cpu, 0, req);
+	if (error != 0 || req->newptr == NULL)
+		return (error);
+	if (cpu <= 0 || cpu >= CPU_NUMBER)
+		return (EINVAL);
+
+	toggle_active_cpu(cpu);
+	return (0);
 }
 
 void toggle_active_cpu(int cpu) {
