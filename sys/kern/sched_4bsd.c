@@ -701,6 +701,8 @@ int
 sched_runnable(void)
 {
 #ifdef SMP
+	if (resource_cpu_is_suspended(PCPU_GET(cpuid)))
+		return (0);
 	return runq_check(&runq) + runq_check(&runq_pcpu[PCPU_GET(cpuid)]);
 #else
 	return runq_check(&runq);
@@ -1517,7 +1519,7 @@ sched_choose(void)
 	struct runq *rq;
 	int is_cpu_suspended;
 
-	is_cpu_suspended = get_place_tokens_qty(PLACE_SUSPENDED + (PCPU_GET(cpuid)*CPU_BASE_PLACES));
+	is_cpu_suspended = resource_cpu_is_suspended(PCPU_GET(cpuid));
 
 	mtx_assert(&sched_lock,  MA_OWNED);
 #ifdef SMP

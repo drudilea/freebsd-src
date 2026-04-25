@@ -47,7 +47,7 @@ const int base_resource_inhibition_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS]
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0}
+	{ 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0}
 };
 
 const char *transitions_names[] = {
@@ -207,6 +207,10 @@ int get_place_tokens_qty(int place_index)
 
 void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 {
+	if (transition_index < 0 || transition_index >= CPU_NUMBER_TRANSITION)
+		panic("petri-net invalid transition: %d from %s",
+		    transition_index, trigger);
+
 	if(pt) {
 		int automatic_transition;
 
@@ -225,11 +229,15 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 		}
 		else {
 			if(print_enabled) {
-				// TODO: Add a kernel panic exit here. We don't care about post error transitions
-				printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
+				printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s - td_flags %#x - td_pinned %d - td_lastcpu %d!!\n",
+				    transitions_names[transition_index],
+				    transition_index, pt->td_tid, PCPU_GET(cpuid),
+				    trigger, pt->td_flags, pt->td_pinned,
+				    pt->td_lastcpu);
 				print_detailed_places();
-				transitions_to_print = 0;
 			}
+			panic("petri-net non-sensitized transition: %s from %s",
+			    transitions_names[transition_index], trigger);
 		}
 	}
 
@@ -296,12 +304,14 @@ int transition_is_sensitized(int transition_index)
 int resource_choose_cpu(struct thread* td)
 {
 	//First we need to know which of the cpu queues is sensitized
+	int cpu;
 	int transition_index;
 	int best = NOCPU;
 
 	if (
 		td->td_lastcpu != NOCPU &&
 		THREAD_CAN_SCHED(td, td->td_lastcpu) &&
+		!resource_cpu_is_suspended(td->td_lastcpu) &&
 		transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)
 	) {
 		best = td->td_lastcpu;
@@ -310,17 +320,29 @@ int resource_choose_cpu(struct thread* td)
 
 	//Only check for transitions of addtoqueue
 	for (transition_index = TRAN_ADDTOQUEUE; transition_index < CPU_NUMBER_TRANSITION-4; transition_index += CPU_BASE_TRANSITIONS) {
+		cpu = transition_index / CPU_BASE_TRANSITIONS;
 		if (transition_is_sensitized(transition_index)) {
-			if (!THREAD_CAN_SCHED(td, (transition_index / CPU_BASE_TRANSITIONS)))
+			if (resource_cpu_is_suspended(cpu))
+				continue;
+			if (!THREAD_CAN_SCHED(td, cpu))
 				continue;
 			else {
-				best = (transition_index / CPU_BASE_TRANSITIONS);
+				best = cpu;
 				break;
 			}
 		}
 	}
 
 	return best;
+}
+
+int
+resource_cpu_is_suspended(int cpu)
+{
+	if (cpu < 0 || cpu >= CPU_NUMBER)
+		return (0);
+	return (resource_net.mark[PLACE_SUSPENDED +
+	    (cpu * CPU_BASE_PLACES)] != 0);
 }
 
 void resource_expulse_thread(struct thread *td, int flags) {
