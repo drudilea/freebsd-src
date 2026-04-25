@@ -69,6 +69,7 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index);
 int transition_is_sensitized(int transition_index);
 int resource_choose_cpu(struct thread *td);
 int resource_cpu_is_suspended(int cpu);
+void resource_wakeup_cpu(int cpu, struct thread *td, char *trigger);
 void resource_expulse_thread(struct thread *td, int flags);
 void resource_execute_thread(struct thread *newtd, int cpu);
 void resource_remove_thread(struct thread *newtd, int cpu);

@@ -1389,6 +1389,7 @@ sched_add(struct thread *td, int flags)
 	}
 
 	if(cpu != NOCPU) {
+		resource_wakeup_cpu(cpu, td, "sched_add_wakeup_suspended");
 		ts->ts_runq = &runq_pcpu[cpu];
 		resource_fire_net("sched_add", td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
 		single_cpu = 1;

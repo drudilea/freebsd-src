@@ -47,7 +47,7 @@ const int base_resource_inhibition_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS]
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0}
+	{ 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0}
 };
 
 const char *transitions_names[] = {
@@ -343,6 +343,15 @@ resource_cpu_is_suspended(int cpu)
 		return (0);
 	return (resource_net.mark[PLACE_SUSPENDED +
 	    (cpu * CPU_BASE_PLACES)] != 0);
+}
+
+void
+resource_wakeup_cpu(int cpu, struct thread *td, char *trigger)
+{
+	if (!resource_cpu_is_suspended(cpu))
+		return;
+	resource_fire_net(trigger, td, (cpu * CPU_BASE_TRANSITIONS) +
+	    TRAN_WAKEUP_PROC);
 }
 
 void resource_expulse_thread(struct thread *td, int flags) {
