@@ -1319,6 +1319,8 @@ sched_add(struct thread *td, int flags)
 	cpuset_t tidlemsk;
 	struct td_sched *ts;
 	u_int cpu = NOCPU, cpuid;
+	int add_transition;
+	int forced_addtoqueue = 0;
 	int forwarded = 0;
 	int single_cpu = 0;
 
@@ -1362,25 +1364,31 @@ sched_add(struct thread *td, int flags)
     */
 	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
 	    ts->ts_flags & TSF_AFFINITY)) {
-		if (td->td_pinned != 0 && td->td_lastcpu != NOCPU &&
-		    transition_is_sensitized(td->td_lastcpu *
-			CPU_BASE_TRANSITIONS))
-			cpu = td->td_lastcpu;
-		else if (td->td_flags & TDF_BOUND) {
+		if (td->td_pinned != 0) {
+			if (td->td_lastcpu != NOCPU)
+				cpu = td->td_lastcpu;
+			else
+				cpu = sched_pickcpu(td);
+			forced_addtoqueue = 1;
+		} else if (td->td_flags & TDF_BOUND) {
 			KASSERT(SKE_RUNQ_PCPU(ts),
 			    ("sched_add: bound td_sched not on cpu runq"));
 			cpu = ts->ts_runq - &runq_pcpu[0];
+			forced_addtoqueue = 1;
 		} else {
 			/* Find a valid CPU for our cpuset. */
 			cpu = sched_petrinet_pickcpu(td);
-			if (cpu == NOCPU)
+			if (cpu == NOCPU) {
 				cpu = sched_pickcpu(td);
+				forced_addtoqueue = 1;
+			}
 		}
 	}
 
 	if(cpu != NOCPU) {
 		ts->ts_runq = &runq_pcpu[cpu];
-		resource_fire_net("sched_add", td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
+		add_transition = forced_addtoqueue ? TRAN_ADDTOQUEUE_FORCED : TRAN_ADDTOQUEUE;
+		resource_fire_net("sched_add", td, add_transition+(cpu*CPU_BASE_TRANSITIONS));
 		single_cpu = 1;
 		CTR3(KTR_RUNQ,
 			"sched_add: Put td_sched:%p(td:%p) on cpu%d runq", ts, td,

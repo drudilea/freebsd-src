@@ -7,7 +7,7 @@
 #define CPU_NUMBER 4
 // FOR GLOBAL TRANISTIONS
 #define CPU_BASE_PLACES 5
-#define CPU_BASE_TRANSITIONS 9
+#define CPU_BASE_TRANSITIONS 10
 #define CPU_NUMBER_PLACES (CPU_BASE_PLACES*CPU_NUMBER)+3
 #define CPU_NUMBER_TRANSITION (CPU_BASE_TRANSITIONS*CPU_NUMBER)+4
 /* Definitions of transition and places for the CPU resource net */
@@ -34,6 +34,7 @@
 #define TRAN_FROM_GLOBAL_CPU 6
 #define TRAN_REMOVE_QUEUE 7
 #define TRAN_REMOVE_EMPTY_QUEUE 8
+#define TRAN_ADDTOQUEUE_FORCED 9
 
 
 //Global transition
