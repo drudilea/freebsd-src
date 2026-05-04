@@ -80,11 +80,6 @@ const int hierarchical_corresponse[] = {
 	TRAN_REMOVE
 };
 
-/*
- * ADDTOQUEUE is the policy enqueue and is inhibited by CANTQ.
- * ADDTOQUEUE_FORCED has the same incidence, but CANTQ does not inhibit it.
- */
-
 static void resource_fire_single_transition(struct thread *pt, int transition_index);
 static int get_automatic_transitions_sensitized(void);
 
