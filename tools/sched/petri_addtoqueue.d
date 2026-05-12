@@ -16,6 +16,16 @@
 
 dtrace:::BEGIN
 {
+	policy_decisions = 0;
+	forced_decisions = 0;
+	forced_pinned = 0;
+	forced_bound = 0;
+	forced_affinity_fallback = 0;
+	global_decisions = 0;
+	policy_fired = 0;
+	forced_fired = 0;
+	blocked_total = 0;
+
 	printf("Tracing Petri addtoqueue probes. Press Ctrl-C to summarize.\n");
 }
 
