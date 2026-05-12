@@ -266,6 +266,7 @@ SYSCTL_INT(_kern_sched, OID_AUTO, followon, CTLFLAG_RW,
 #endif
 
 SDT_PROVIDER_DEFINE(sched);
+SDT_PROVIDER_DECLARE(petri);
 
 SDT_PROBE_DEFINE3(sched, , , change__pri, "struct thread *", 
     "struct proc *", "uint8_t");
@@ -282,6 +283,10 @@ SDT_PROBE_DEFINE(sched, , , on__cpu);
 SDT_PROBE_DEFINE(sched, , , remain__cpu);
 SDT_PROBE_DEFINE2(sched, , , surrender, "struct thread *",
     "struct proc *");
+SDT_PROBE_DEFINE5(petri, sched, addtoqueue, decision, "struct thread *",
+    "int", "int", "int", "int");
+SDT_PROBE_DEFINE3(petri, sched, addtoqueue, global, "struct thread *",
+    "int", "int");
 
 static __inline void
 sched_load_add(void)
@@ -1321,6 +1326,7 @@ sched_add(struct thread *td, int flags)
 	u_int cpu = NOCPU, cpuid;
 	int add_transition;
 	int forced_addtoqueue = 0;
+	int addtoqueue_reason = PETRI_ADDQ_REASON_POLICY;
 	int forwarded = 0;
 	int single_cpu = 0;
 
@@ -1370,17 +1376,21 @@ sched_add(struct thread *td, int flags)
 			else
 				cpu = sched_pickcpu(td);
 			forced_addtoqueue = 1;
+			addtoqueue_reason = PETRI_ADDQ_REASON_PINNED;
 		} else if (td->td_flags & TDF_BOUND) {
 			KASSERT(SKE_RUNQ_PCPU(ts),
 			    ("sched_add: bound td_sched not on cpu runq"));
 			cpu = ts->ts_runq - &runq_pcpu[0];
 			forced_addtoqueue = 1;
+			addtoqueue_reason = PETRI_ADDQ_REASON_BOUND;
 		} else {
 			/* Find a valid CPU for our cpuset. */
 			cpu = sched_petrinet_pickcpu(td);
 			if (cpu == NOCPU) {
 				cpu = sched_pickcpu(td);
 				forced_addtoqueue = 1;
+				addtoqueue_reason =
+				    PETRI_ADDQ_REASON_AFFINITY_FALLBACK;
 			}
 		}
 	}
@@ -1388,6 +1398,8 @@ sched_add(struct thread *td, int flags)
 	if(cpu != NOCPU) {
 		ts->ts_runq = &runq_pcpu[cpu];
 		add_transition = forced_addtoqueue ? TRAN_ADDTOQUEUE_FORCED : TRAN_ADDTOQUEUE;
+		SDT_PROBE5(petri, sched, addtoqueue, decision, td, cpu,
+		    add_transition, addtoqueue_reason, flags);
 		resource_fire_net("sched_add", td, add_transition+(cpu*CPU_BASE_TRANSITIONS));
 		single_cpu = 1;
 		CTR3(KTR_RUNQ,
@@ -1398,6 +1410,8 @@ sched_add(struct thread *td, int flags)
 		    "sched_add: adding td_sched:%p (td:%p) to gbl runq", ts,
 		    td);
 		ts->ts_runq = &runq;
+		SDT_PROBE3(petri, sched, addtoqueue, global, td, flags,
+		    smp_started);
 		resource_fire_net("sched_add", td, TRAN_QUEUE_GLOBAL);
 	}
 

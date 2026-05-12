@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/cpuset.h>
+#include <sys/sdt.h>
 #include <sys/smp.h>
 #include <sys/time.h>
 #include <sys/sched_petri.h>
@@ -25,6 +26,17 @@ int smp_set = 0;
 int print_enabled = 1;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
+
+SDT_PROVIDER_DEFINE(petri);
+
+SDT_PROBE_DEFINE5(petri, resource, transition, fire,
+    "struct thread *", "char *", "int", "int", "int");
+SDT_PROBE_DEFINE5(petri, resource, transition, blocked,
+    "struct thread *", "char *", "int", "int", "int");
+SDT_PROBE_DEFINE5(petri, resource, addtoqueue, policy,
+    "struct thread *", "char *", "int", "int", "int");
+SDT_PROBE_DEFINE5(petri, resource, addtoqueue, forced,
+    "struct thread *", "char *", "int", "int", "int");
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base matrix */
@@ -80,8 +92,29 @@ const int hierarchical_corresponse[] = {
 	TRAN_REMOVE
 };
 
-static void resource_fire_single_transition(struct thread *pt, int transition_index);
+static void resource_fire_single_transition(struct thread *pt, char *trigger,
+    int transition_index);
 static int get_automatic_transitions_sensitized(void);
+static __inline int resource_transition_base(int transition_index);
+static __inline int resource_transition_cpu(int transition_index);
+
+static __inline int
+resource_transition_base(int transition_index)
+{
+	if (transition_index >= 0 &&
+	    transition_index < (CPU_BASE_TRANSITIONS * CPU_NUMBER))
+		return (transition_index % CPU_BASE_TRANSITIONS);
+	return (transition_index);
+}
+
+static __inline int
+resource_transition_cpu(int transition_index)
+{
+	if (transition_index >= 0 &&
+	    transition_index < (CPU_BASE_TRANSITIONS * CPU_NUMBER))
+		return (transition_index / CPU_BASE_TRANSITIONS);
+	return (NOCPU);
+}
 
 void init_resource_net()
 {
@@ -176,18 +209,23 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 
 		if(!smp_set && smp_started) {
 			smp_set = 1;
-			resource_fire_single_transition(pt, TRAN_START_SMP);
+			resource_fire_single_transition(pt, trigger, TRAN_START_SMP);
 		}
 
 		if(transition_is_sensitized(transition_index)) {
-			resource_fire_single_transition(pt, transition_index);
+			resource_fire_single_transition(pt, trigger, transition_index);
 			automatic_transition = get_automatic_transitions_sensitized();
 			while (automatic_transition != -1) {
-				resource_fire_single_transition(pt, automatic_transition);
+				resource_fire_single_transition(pt, trigger,
+				    automatic_transition);
 				automatic_transition = get_automatic_transitions_sensitized();
 			}
 		}
 		else {
+			SDT_PROBE5(petri, resource, transition, blocked, pt,
+			    trigger, transition_index,
+			    resource_transition_cpu(transition_index),
+			    PCPU_GET(cpuid));
 			if(print_enabled) {
 				// TODO: Add a kernel panic exit here. We don't care about post error transitions
 				printf("!! %s - Non sensitized transition: %2d - Thread %2d - CPU %2d - FROM %s!!\n", transitions_names[transition_index], transition_index, pt->td_tid, PCPU_GET(cpuid), trigger);
@@ -204,8 +242,12 @@ void resource_fire_net(char *trigger, struct thread *pt, int transition_index)
 }
 
 
-static void resource_fire_single_transition(struct thread *pt, int transition_index) {
+static void
+resource_fire_single_transition(struct thread *pt, char *trigger,
+    int transition_index)
+{
 	int num_place;
+	int cpu;
 	int local_transition;
 
 	//Fire cpu net
@@ -213,6 +255,29 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 		resource_net.mark[num_place] = resource_net.mark[num_place] + resource_net.incidence_matrix[num_place][transition_index];
 	}
 	local_transition = is_hierarchical(transition_index);
+	cpu = resource_transition_cpu(transition_index);
+	SDT_PROBE5(petri, resource, transition, fire, pt, trigger,
+	    transition_index, cpu, local_transition);
+	if (cpu != NOCPU) {
+		switch (resource_transition_base(transition_index)) {
+		case TRAN_ADDTOQUEUE:
+			SDT_PROBE5(petri, resource, addtoqueue, policy, pt,
+			    trigger, cpu,
+			    resource_net.mark[PLACE_QUEUE +
+			    (cpu * CPU_BASE_PLACES)],
+			    resource_net.mark[PLACE_CANTQ +
+			    (cpu * CPU_BASE_PLACES)]);
+			break;
+		case TRAN_ADDTOQUEUE_FORCED:
+			SDT_PROBE5(petri, resource, addtoqueue, forced, pt,
+			    trigger, cpu,
+			    resource_net.mark[PLACE_QUEUE +
+			    (cpu * CPU_BASE_PLACES)],
+			    resource_net.mark[PLACE_CANTQ +
+			    (cpu * CPU_BASE_PLACES)]);
+			break;
+		}
+	}
 	if (local_transition) {
 		//If we need to fire a local thread transition we fire it here
 		thread_petri_fire(pt, local_transition);
