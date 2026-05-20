@@ -1315,7 +1315,7 @@ sched_add(struct thread *td, int flags)
 		thread_petri_fire(td, TRAN_WAKEUP);
 		td->td_frominh = 0;
 	}
-	
+
 	cpuset_t tidlemsk;
 	struct td_sched *ts;
 	u_int cpu = NOCPU, cpuid;
