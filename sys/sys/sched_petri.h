@@ -7,7 +7,7 @@
 #define CPU_NUMBER 4
 // FOR GLOBAL TRANISTIONS
 #define CPU_BASE_PLACES 6
-#define CPU_BASE_TRANSITIONS 12
+#define CPU_BASE_TRANSITIONS 13
 #define CPU_NUMBER_PLACES (CPU_BASE_PLACES*CPU_NUMBER)+3
 #define CPU_NUMBER_TRANSITION (CPU_BASE_TRANSITIONS*CPU_NUMBER)+4
 /* Definitions of transition and places for the CPU resource net */
@@ -38,12 +38,18 @@
 #define TRAN_REMOVE_EMPTY_QUEUE 9
 #define TRAN_SUSPEND_PROC 10
 #define TRAN_WAKEUP_PROC 11
+#define TRAN_ADDTOQUEUE_FORCED 12
 
 //Global transition
 #define TRAN_REMOVE_GLOBAL_QUEUE (CPU_NUMBER_TRANSITION-4) 
 #define TRAN_START_SMP (CPU_NUMBER_TRANSITION-3)
 #define TRAN_THROW (CPU_NUMBER_TRANSITION-2)
 #define TRAN_QUEUE_GLOBAL (CPU_NUMBER_TRANSITION-1)
+
+#define PETRI_ADDQ_REASON_POLICY 0
+#define PETRI_ADDQ_REASON_PINNED 1
+#define PETRI_ADDQ_REASON_BOUND 2
+#define PETRI_ADDQ_REASON_AFFINITY_FALLBACK 3
 
 struct petri_cpu_resource_net {
 	int mark[CPU_NUMBER_PLACES];
@@ -65,8 +71,11 @@ void thread_print_detailed_places(struct thread *pt);
 //Petri Global Methods
 void init_resource_net(void);
 void resource_get_sensitized(void);
-void resource_fire_net(char *trigger, struct thread *pt, int transition_index);
+void resource_fire_net(const char *trigger, struct thread *pt,
+    int transition_index);
 int transition_is_sensitized(int transition_index);
+int resource_valid_cpu(int cpu);
+int resource_valid_transition(int transition_index);
 int resource_choose_cpu(struct thread *td);
 int resource_cpu_is_suspended(int cpu);
 void resource_wakeup_cpu(int cpu, struct thread *td, char *trigger);

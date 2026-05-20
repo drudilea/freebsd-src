@@ -95,6 +95,14 @@ options 	KDB_TRACE		# Print a stack trace for a panic.
 options		DDB
 options		GDB
 options		KDB_UNATTENDED
+# PI_KERNELCONF is the development kernel used for the Petri-net scheduler
+# prototype.  Keep invariant and lock-order checks enabled here so scheduler
+# state bugs fail early during experiments without changing GENERIC.
+options 	INVARIANTS
+options 	INVARIANT_SUPPORT
+options 	DIAGNOSTIC
+options 	WITNESS
+options 	WITNESS_SKIPSPIN
 
 # Kernel Sanitizers
 #options 	COVERAGE		# Generic kernel coverage. Used by KCOV
