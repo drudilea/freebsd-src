@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/cpuset.h>
+#include <sys/sdt.h>
 #include <sys/smp.h>
 #include <sys/systm.h>
 #include <sys/time.h>
@@ -27,29 +28,40 @@ int print_enabled = 1;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
 
+SDT_PROVIDER_DEFINE(petri);
+
+SDT_PROBE_DEFINE5(petri, resource, transition, fire,
+    "struct thread *", "char *", "int", "int", "int");
+SDT_PROBE_DEFINE5(petri, resource, transition, blocked,
+    "struct thread *", "char *", "int", "int", "int");
+SDT_PROBE_DEFINE5(petri, resource, addtoqueue, policy,
+    "struct thread *", "char *", "int", "int", "int");
+SDT_PROBE_DEFINE5(petri, resource, addtoqueue, forced,
+    "struct thread *", "char *", "int", "int", "int");
+
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base matrix */
-	{ 1, 0,-1, 0, 0, 0, 0,-1, 0},
-	{ 1,-1, 0, 0, 0, 0, 0,-1,-1},
-	{ 0,-1, 0, 0, 1, 1,-1, 0, 0},
-	{ 0, 1,-1,-1, 0, 0, 1, 0, 0},
-	{ 0, 0, 1, 1,-1,-1, 0, 0, 0}
+	{ 1, 0,-1, 0, 0, 0, 0,-1, 0, 1},
+	{ 1,-1, 0, 0, 0, 0, 0,-1,-1, 1},
+	{ 0,-1, 0, 0, 1, 1,-1, 0, 0, 0},
+	{ 0, 1,-1,-1, 0, 0, 1, 0, 0, 0},
+	{ 0, 0, 1, 1,-1,-1, 0, 0, 0, 0}
 };
 
 const int base_resource_inhibition_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base inhibition matrix */
-	{ 0, 0, 0, 1, 0, 0, 0, 0, 1},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	{ 0, 0, 0, 1, 0, 0, 0, 0, 1, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
 const char *transitions_names[] = {
-	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0",
-	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1",
-	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2",
-	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3",
+	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0", "ADDTOQUEUE_FORCED_P0",
+	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1", "ADDTOQUEUE_FORCED_P1",
+	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2", "ADDTOQUEUE_FORCED_P2",
+	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3", "ADDTOQUEUE_FORCED_P3",
 	"REMOVE_GLOBAL_QUEUE", "START_SMP", "THROW", "QUEUE_GLOBAL"
 };
 
@@ -63,6 +75,7 @@ const int hierarchical_transitions[] = {
 	TRAN_RETURN_VOL,
 	TRAN_REMOVE_QUEUE,
 	TRAN_REMOVE_EMPTY_QUEUE,
+	TRAN_ADDTOQUEUE_FORCED,
 	TRAN_QUEUE_GLOBAL,
 	TRAN_REMOVE_GLOBAL_QUEUE
 };
@@ -76,28 +89,34 @@ const int hierarchical_corresponse[] = {
 	TRAN_REMOVE,
 	TRAN_REMOVE,
 	TRAN_ON_QUEUE,
+	TRAN_ON_QUEUE,
 	TRAN_REMOVE
 };
 
-/* Extended matrix izq der                GLOBAL TRANSITIONS
-	{ 1, 0,-1, 0, 0, 0, 0,-1, 0},					  	       ,{ 0, 0, 0,-1, 0}
-	{ 1,-1, 0, 0, 0, 0, 0,-1,-1},					           ,{ 0, 0, 0, 0, 0}
-	{ 0,-1, 0, 0, 1, 1,-1, 0, 0},					           ,{ 0, 0, 0, 0, 0}
-	{ 0, 1,-1,-1, 0, 0, 1, 0, 0}					           ,{ 0,-1, 0, 0, 0}
-	{ 0, 0, 1, 1,-1,-1, 0, 0, 0}					           ,{ 0, 0, 0, 0, 0}
-						         { 1, 0,-1, 0, 0, 0, 0,-1, 0}, ,{ 0, 0, 0,-1, 0}
-							     { 1,-1, 0, 0, 0, 0, 0,-1,-1}, ,{ 0, 0, 0, 0, 0}
-							     { 0,-1, 0, 0, 1, 1,-1, 0, 0}, ,{ 0, 0, 0, 0, 0}
-							     { 0, 1,-1,-1, 0, 0, 1, 0, 0}  ,{ 0, 0, 0, 0, 0}
-							     { 0, 0, 1, 1,-1,-1, 0, 0, 0}  ,{ 0, 0, 0, 0, 0}
-	GLOBAL PLACE
-	{ 0, 0, 0, 0, 0, 0,-1, 0, 0} { 0, 0, 0, 0, 0, 0,-1, 0, 0}  ,{-1, 0, 0, 0, 1}
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0} { 0, 0, 0, 0, 0, 0, 0, 0, 0}  ,{ 0, 0,-1, 0, 0}
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0} { 0, 0, 0, 0, 0, 0, 0, 0, 0}  ,{ 0, 0, 1, 0, 0}
-*/
-
-static void resource_fire_single_transition(struct thread *pt, int transition_index);
+static void resource_fire_single_transition(struct thread *pt,
+    const char *trigger,
+    int transition_index);
 static int get_automatic_transitions_sensitized(void);
+static __inline int resource_transition_base(int transition_index);
+static __inline int resource_transition_cpu(int transition_index);
+
+static __inline int
+resource_transition_base(int transition_index)
+{
+	if (transition_index >= 0 &&
+	    transition_index < (CPU_BASE_TRANSITIONS * CPU_NUMBER))
+		return (transition_index % CPU_BASE_TRANSITIONS);
+	return (transition_index);
+}
+
+static __inline int
+resource_transition_cpu(int transition_index)
+{
+	if (transition_index >= 0 &&
+	    transition_index < (CPU_BASE_TRANSITIONS * CPU_NUMBER))
+		return (transition_index / CPU_BASE_TRANSITIONS);
+	return (NOCPU);
+}
 
 int
 resource_valid_cpu(int cpu)
@@ -145,6 +164,7 @@ void init_resource_net()
 		//INHIBIT exec if smp not started
 		resource_net.inhibition_matrix[PLACE_SMP_NOT_READY][(num_cpu*CPU_BASE_TRANSITIONS) + TRAN_EXEC] = 1;
 		resource_net.inhibition_matrix[PLACE_SMP_NOT_READY][(num_cpu*CPU_BASE_TRANSITIONS) + TRAN_ADDTOQUEUE] = 1;
+		resource_net.inhibition_matrix[PLACE_SMP_NOT_READY][(num_cpu*CPU_BASE_TRANSITIONS) + TRAN_ADDTOQUEUE_FORCED] = 1;
 	}
 
 	//Transition to remove from global queue
@@ -213,18 +233,23 @@ void resource_fire_net(const char *trigger, struct thread *pt,
 
 	if(!smp_set && smp_started) {
 		smp_set = 1;
-		resource_fire_single_transition(pt, TRAN_START_SMP);
+		resource_fire_single_transition(pt, trigger, TRAN_START_SMP);
 	}
 
 	if(transition_is_sensitized(transition_index)) {
-		resource_fire_single_transition(pt, transition_index);
+		resource_fire_single_transition(pt, trigger, transition_index);
 		automatic_transition = get_automatic_transitions_sensitized();
 		while (automatic_transition != -1) {
-			resource_fire_single_transition(pt, automatic_transition);
+			resource_fire_single_transition(pt, trigger,
+			    automatic_transition);
 			automatic_transition = get_automatic_transitions_sensitized();
 		}
 	}
 	else {
+		SDT_PROBE5(petri, resource, transition, blocked, pt,
+		    trigger, transition_index,
+		    resource_transition_cpu(transition_index),
+		    PCPU_GET(cpuid));
 		print_detailed_places();
 		panic("petri: non-sensitized resource transition %s(%d) "
 		    "from %s, td %p tid %d cpu %d lastcpu %d",
@@ -240,8 +265,12 @@ void resource_fire_net(const char *trigger, struct thread *pt,
 }
 
 
-static void resource_fire_single_transition(struct thread *pt, int transition_index) {
+static void
+resource_fire_single_transition(struct thread *pt, const char *trigger,
+    int transition_index)
+{
 	int num_place;
+	int cpu;
 	int local_transition;
 
 	if (!resource_valid_transition(transition_index)) {
@@ -255,6 +284,29 @@ static void resource_fire_single_transition(struct thread *pt, int transition_in
 		resource_net.mark[num_place] = resource_net.mark[num_place] + resource_net.incidence_matrix[num_place][transition_index];
 	}
 	local_transition = is_hierarchical(transition_index);
+	cpu = resource_transition_cpu(transition_index);
+	SDT_PROBE5(petri, resource, transition, fire, pt, trigger,
+	    transition_index, cpu, local_transition);
+	if (cpu != NOCPU) {
+		switch (resource_transition_base(transition_index)) {
+		case TRAN_ADDTOQUEUE:
+			SDT_PROBE5(petri, resource, addtoqueue, policy, pt,
+			    trigger, cpu,
+			    resource_net.mark[PLACE_QUEUE +
+			    (cpu * CPU_BASE_PLACES)],
+			    resource_net.mark[PLACE_CANTQ +
+			    (cpu * CPU_BASE_PLACES)]);
+			break;
+		case TRAN_ADDTOQUEUE_FORCED:
+			SDT_PROBE5(petri, resource, addtoqueue, forced, pt,
+			    trigger, cpu,
+			    resource_net.mark[PLACE_QUEUE +
+			    (cpu * CPU_BASE_PLACES)],
+			    resource_net.mark[PLACE_CANTQ +
+			    (cpu * CPU_BASE_PLACES)]);
+			break;
+		}
+	}
 	if (local_transition) {
 		//If we need to fire a local thread transition we fire it here
 		thread_petri_fire(pt, local_transition);
