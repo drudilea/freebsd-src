@@ -1,0 +1,157 @@
+#!/usr/sbin/dtrace -s
+
+/*
+ * Summarize Petri scheduler enqueue decisions and fired transitions.
+ *
+ * Usage:
+ *     # kldload dtraceall
+ *     # dtrace -l -P petri
+ *     # ./tools/sched/petri_addtoqueue.d
+ *
+ * Run the workload in another terminal and stop this script with Ctrl-C.
+ */
+
+#pragma D option quiet
+#pragma D option dynvarsize=16m
+
+dtrace:::BEGIN
+{
+	policy_decisions = 0;
+	forced_decisions = 0;
+	forced_pinned = 0;
+	forced_bound = 0;
+	forced_affinity_fallback = 0;
+	global_decisions = 0;
+	policy_fired = 0;
+	forced_fired = 0;
+	blocked_total = 0;
+
+	printf("Tracing Petri addtoqueue probes. Press Ctrl-C to summarize.\n");
+}
+
+petri:sched:addtoqueue:decision
+{
+	@decisions[
+	    args[3] == 1 ? "pinned" :
+	    args[3] == 2 ? "bound" :
+	    args[3] == 3 ? "affinity-fallback" : "policy",
+	    args[1],
+	    args[2]] = count();
+
+	policy_decisions += args[3] == 0 ? 1 : 0;
+	forced_decisions += args[3] != 0 ? 1 : 0;
+	forced_pinned += args[3] == 1 ? 1 : 0;
+	forced_bound += args[3] == 2 ? 1 : 0;
+	forced_affinity_fallback += args[3] == 3 ? 1 : 0;
+}
+
+petri:sched:addtoqueue:global
+{
+	@global[args[2] ? "smp-started" : "smp-not-started"] = count();
+	global_decisions++;
+}
+
+petri:resource:addtoqueue:policy
+{
+	@fired["policy", args[2]] = count();
+	@queue_after["policy", args[2], args[3]] = count();
+	@cantq_after["policy", args[2], args[4]] = count();
+
+	policy_fired++;
+}
+
+petri:resource:addtoqueue:forced
+{
+	@fired["forced", args[2]] = count();
+	@queue_after["forced", args[2], args[3]] = count();
+	@cantq_after["forced", args[2], args[4]] = count();
+
+	forced_fired++;
+}
+
+petri:resource:transition:blocked
+{
+	@blocked[args[2], args[3], args[4]] = count();
+	blocked_total++;
+}
+
+dtrace:::END
+/(policy_decisions + forced_decisions + global_decisions) > 0/
+{
+	this->total = policy_decisions + forced_decisions + global_decisions;
+
+	printf("\nPetri sched_add decision totals:\n");
+	printf("%24s %12s %10s\n", "kind", "count", "percent");
+	printf("%24s %12d %7d.%02d%%\n", "QUEUE_GLOBAL",
+	    global_decisions, (global_decisions * 100) / this->total,
+	    ((global_decisions * 10000) / this->total) % 100);
+	printf("%24s %12d %7d.%02d%%\n", "ADDTOQUEUE_POLICY",
+	    policy_decisions, (policy_decisions * 100) / this->total,
+	    ((policy_decisions * 10000) / this->total) % 100);
+	printf("%24s %12d %7d.%02d%%\n", "ADDTOQUEUE_FORCED",
+	    forced_decisions, (forced_decisions * 100) / this->total,
+	    ((forced_decisions * 10000) / this->total) % 100);
+	printf("%24s %12d %7s\n", "TOTAL", this->total, "100.00%");
+}
+
+dtrace:::END
+/(policy_decisions + forced_decisions + global_decisions) == 0/
+{
+	printf("\nPetri sched_add decision totals:\n");
+	printf("No sched_add enqueue decisions captured.\n");
+}
+
+dtrace:::END
+/forced_decisions > 0/
+{
+	printf("\nPetri forced decision breakdown:\n");
+	printf("%24s %12s %18s\n", "reason", "count", "percent_of_forced");
+	printf("%24s %12d %15d.%02d%%\n", "pinned",
+	    forced_pinned, (forced_pinned * 100) / forced_decisions,
+	    ((forced_pinned * 10000) / forced_decisions) % 100);
+	printf("%24s %12d %15d.%02d%%\n", "bound",
+	    forced_bound, (forced_bound * 100) / forced_decisions,
+	    ((forced_bound * 10000) / forced_decisions) % 100);
+	printf("%24s %12d %15d.%02d%%\n", "affinity-fallback",
+	    forced_affinity_fallback,
+	    (forced_affinity_fallback * 100) / forced_decisions,
+	    ((forced_affinity_fallback * 10000) / forced_decisions) % 100);
+}
+
+dtrace:::END
+/(policy_fired + forced_fired) > 0/
+{
+	this->total = policy_fired + forced_fired;
+
+	printf("\nPetri addtoqueue fired totals:\n");
+	printf("%24s %12s %10s\n", "kind", "count", "percent");
+	printf("%24s %12d %7d.%02d%%\n", "ADDTOQUEUE_POLICY",
+	    policy_fired, (policy_fired * 100) / this->total,
+	    ((policy_fired * 10000) / this->total) % 100);
+	printf("%24s %12d %7d.%02d%%\n", "ADDTOQUEUE_FORCED",
+	    forced_fired, (forced_fired * 100) / this->total,
+	    ((forced_fired * 10000) / this->total) % 100);
+	printf("%24s %12d %7s\n", "TOTAL", this->total, "100.00%");
+	printf("%24s %12d\n", "BLOCKED_TRANSITIONS", blocked_total);
+}
+
+dtrace:::END
+{
+	printf("\nPetri sched_add decisions by reason, target CPU and transition:\n");
+	printa("%20s cpu=%d transition=%d %@d\n", @decisions);
+
+	printf("\nPetri global queue enqueues:\n");
+	printa("%20s %@d\n", @global);
+
+	printf("\nPetri addtoqueue transitions fired by kind and CPU:\n");
+	printa("%20s cpu=%d %@d\n", @fired);
+
+	printf("\nPetri queue mark after addtoqueue by kind, CPU and mark:\n");
+	printa("%20s cpu=%d queue_mark=%d %@d\n", @queue_after);
+
+	printf("\nPetri CANTQ mark after addtoqueue by kind, CPU and mark:\n");
+	printa("%20s cpu=%d cantq_mark=%d %@d\n", @cantq_after);
+
+	printf("\nBlocked Petri transitions by transition, target CPU and running CPU:\n");
+	printa("transition=%d target_cpu=%d running_cpu=%d %@d\n", @blocked);
+}

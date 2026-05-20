@@ -266,6 +266,7 @@ SYSCTL_INT(_kern_sched, OID_AUTO, followon, CTLFLAG_RW,
 #endif
 
 SDT_PROVIDER_DEFINE(sched);
+SDT_PROVIDER_DECLARE(petri);
 
 SDT_PROBE_DEFINE3(sched, , , change__pri, "struct thread *", 
     "struct proc *", "uint8_t");
@@ -282,6 +283,10 @@ SDT_PROBE_DEFINE(sched, , , on__cpu);
 SDT_PROBE_DEFINE(sched, , , remain__cpu);
 SDT_PROBE_DEFINE2(sched, , , surrender, "struct thread *",
     "struct proc *");
+SDT_PROBE_DEFINE5(petri, sched, addtoqueue, decision, "struct thread *",
+    "int", "int", "int", "int");
+SDT_PROBE_DEFINE3(petri, sched, addtoqueue, global, "struct thread *",
+    "int", "int");
 
 static __inline void
 sched_load_add(void)
@@ -1319,6 +1324,9 @@ sched_add(struct thread *td, int flags)
 	cpuset_t tidlemsk;
 	struct td_sched *ts;
 	u_int cpu = NOCPU, cpuid;
+	int add_transition;
+	int forced_addtoqueue = 0;
+	int addtoqueue_reason = PETRI_ADDQ_REASON_POLICY;
 	int forwarded = 0;
 	int single_cpu = 0;
 
@@ -1362,25 +1370,49 @@ sched_add(struct thread *td, int flags)
     */
 	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
 	    ts->ts_flags & TSF_AFFINITY)) {
-		if (td->td_pinned != 0 && td->td_lastcpu != NOCPU &&
-		    transition_is_sensitized(td->td_lastcpu *
-			CPU_BASE_TRANSITIONS))
-			cpu = td->td_lastcpu;
-		else if (td->td_flags & TDF_BOUND) {
-			KASSERT(SKE_RUNQ_PCPU(ts),
-			    ("sched_add: bound td_sched not on cpu runq"));
+		if (td->td_pinned != 0) {
+			if (td->td_lastcpu != NOCPU)
+				cpu = td->td_lastcpu;
+			else
+				cpu = sched_pickcpu(td);
+			forced_addtoqueue = 1;
+			addtoqueue_reason = PETRI_ADDQ_REASON_PINNED;
+		} else if (td->td_flags & TDF_BOUND) {
+			/* Find CPU from bound runq, preserving stock 4BSD semantics. */
+			if (!SKE_RUNQ_PCPU(ts)) {
+				panic("sched_add: bound td_sched not on cpu "
+				    "runq, td %p tid %d runq %p", td,
+				    td->td_tid, ts->ts_runq);
+			}
 			cpu = ts->ts_runq - &runq_pcpu[0];
+			if (!resource_valid_cpu(cpu)) {
+				panic("sched_add: invalid bound cpu %u, td %p "
+				    "tid %d", cpu, td, td->td_tid);
+			}
+			forced_addtoqueue = 1;
+			addtoqueue_reason = PETRI_ADDQ_REASON_BOUND;
 		} else {
 			/* Find a valid CPU for our cpuset. */
 			cpu = sched_petrinet_pickcpu(td);
-			if (cpu == NOCPU)
+			if (cpu == NOCPU) {
 				cpu = sched_pickcpu(td);
+				forced_addtoqueue = 1;
+				addtoqueue_reason =
+				    PETRI_ADDQ_REASON_AFFINITY_FALLBACK;
+			}
+		}
+		if (!resource_valid_cpu(cpu)) {
+			panic("sched_add: invalid selected cpu %u, td %p "
+			    "tid %d", cpu, td, td->td_tid);
 		}
 	}
 
 	if(cpu != NOCPU) {
 		ts->ts_runq = &runq_pcpu[cpu];
-		resource_fire_net("sched_add", td, TRAN_ADDTOQUEUE+(cpu*CPU_BASE_TRANSITIONS));
+		add_transition = forced_addtoqueue ? TRAN_ADDTOQUEUE_FORCED : TRAN_ADDTOQUEUE;
+		SDT_PROBE5(petri, sched, addtoqueue, decision, td, cpu,
+		    add_transition, addtoqueue_reason, flags);
+		resource_fire_net("sched_add", td, add_transition+(cpu*CPU_BASE_TRANSITIONS));
 		single_cpu = 1;
 		CTR3(KTR_RUNQ,
 			"sched_add: Put td_sched:%p(td:%p) on cpu%d runq", ts, td,
@@ -1390,6 +1422,8 @@ sched_add(struct thread *td, int flags)
 		    "sched_add: adding td_sched:%p (td:%p) to gbl runq", ts,
 		    td);
 		ts->ts_runq = &runq;
+		SDT_PROBE3(petri, sched, addtoqueue, global, td, flags,
+		    smp_started);
 		resource_fire_net("sched_add", td, TRAN_QUEUE_GLOBAL);
 	}
 
@@ -1487,8 +1521,19 @@ sched_rem(struct thread *td)
 		sched_load_rem();
 #ifdef SMP
 	if (ts->ts_runq != &runq) {
-		runq_length[ts->ts_runq - runq_pcpu]--;
-		resource_remove_thread(td, (ts->ts_runq - runq_pcpu));
+		int cpu;
+
+		if (!SKE_RUNQ_PCPU(ts)) {
+			panic("sched_rem: td_sched not on cpu runq, td %p "
+			    "tid %d runq %p", td, td->td_tid, ts->ts_runq);
+		}
+		cpu = ts->ts_runq - runq_pcpu;
+		if (!resource_valid_cpu(cpu)) {
+			panic("sched_rem: invalid cpu runq %d, td %p tid %d",
+			    cpu, td, td->td_tid);
+		}
+		runq_length[cpu]--;
+		resource_remove_thread(td, cpu);
 	}
 	else {
 		resource_fire_net("sched_rem", td, TRAN_REMOVE_GLOBAL_QUEUE);
