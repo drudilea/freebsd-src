@@ -9,10 +9,13 @@
  */
 
 #include <sys/types.h>
+#include <sys/errno.h>
 #include <sys/param.h>
 #include <sys/cpuset.h>
+#include <sys/kernel.h>
 #include <sys/sdt.h>
 #include <sys/smp.h>
+#include <sys/sysctl.h>
 #include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/sched_petri.h>
@@ -27,6 +30,7 @@ int smp_set = 0;
 int print_enabled = 1;
 int transitions_to_print = 0;
 struct petri_cpu_resource_net resource_net;
+static int pinned_threads_per_cpu[CPU_NUMBER] = { -1, -1, -1, -1 };
 
 SDT_PROVIDER_DEFINE(petri);
 
@@ -97,8 +101,16 @@ static void resource_fire_single_transition(struct thread *pt,
     const char *trigger,
     int transition_index);
 static int get_automatic_transitions_sensitized(void);
+static int sysctl_sched_petri_monopolize(SYSCTL_HANDLER_ARGS);
 static __inline int resource_transition_base(int transition_index);
 static __inline int resource_transition_cpu(int transition_index);
+
+SYSCTL_NODE(_kern, OID_AUTO, sched_petri, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
+    "Petri-net scheduler controls");
+SYSCTL_PROC(_kern_sched_petri, OID_AUTO, monopolize,
+    CTLTYPE_STRING | CTLFLAG_RW | CTLFLAG_MPSAFE, 0, 0,
+    sysctl_sched_petri_monopolize, "A",
+    "Toggle monopolization for a thread/cpu pair using tid:cpu");
 
 static __inline int
 resource_transition_base(int transition_index)
@@ -360,6 +372,11 @@ int resource_choose_cpu(struct thread* td)
 	//First we need to know which of the cpu queues is sensitized
 	int transition_index;
 	int best = NOCPU;
+	int tid = (int)td->td_tid;
+
+	best = get_monopolized_cpu_by_thread_id(tid);
+	if (best != NOCPU)
+		return (best);
 
 	if (td->td_lastcpu != NOCPU && !resource_valid_cpu(td->td_lastcpu)) {
 		panic("petri: invalid lastcpu %d in resource_choose_cpu, td %p "
@@ -370,7 +387,8 @@ int resource_choose_cpu(struct thread* td)
 		td->td_lastcpu != NOCPU &&
 			resource_valid_cpu(td->td_lastcpu) &&
 			THREAD_CAN_SCHED(td, td->td_lastcpu) &&
-			transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)
+			transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS) &&
+			cpu_available_for_thread(tid, td->td_lastcpu)
 	) {
 		best = td->td_lastcpu;
 		return best;
@@ -379,10 +397,14 @@ int resource_choose_cpu(struct thread* td)
 	//Only check for transitions of addtoqueue
 	for (transition_index = TRAN_ADDTOQUEUE; transition_index < CPU_NUMBER_TRANSITION-4; transition_index += CPU_BASE_TRANSITIONS) {
 		if (transition_is_sensitized(transition_index)) {
-			if (!THREAD_CAN_SCHED(td, (transition_index / CPU_BASE_TRANSITIONS)))
+			int target_cpu;
+
+			target_cpu = transition_index / CPU_BASE_TRANSITIONS;
+			if (!THREAD_CAN_SCHED(td, target_cpu) ||
+			    !cpu_available_for_thread(tid, target_cpu))
 				continue;
 			else {
-				best = (transition_index / CPU_BASE_TRANSITIONS);
+				best = target_cpu;
 				break;
 			}
 		}
@@ -457,4 +479,60 @@ void print_detailed_places() {
 
 void set_print_transition(int number_transitions) {
 	transitions_to_print = number_transitions;
+}
+
+static int
+sysctl_sched_petri_monopolize(SYSCTL_HANDLER_ARGS)
+{
+	char input[32];
+	int cpu;
+	int error;
+	int thread_id;
+
+	input[0] = '\0';
+	error = sysctl_handle_string(oidp, input, sizeof(input), req);
+	if (error != 0 || req->newptr == NULL)
+		return (error);
+	if (sscanf(input, "%d:%d", &thread_id, &cpu) != 2)
+		return (EINVAL);
+	if (thread_id <= 0 || cpu <= 0 || cpu >= CPU_NUMBER)
+		return (EINVAL);
+
+	toggle_pin_thread_to_cpu(thread_id, cpu);
+	return (0);
+}
+
+void
+toggle_pin_thread_to_cpu(int thread_id, int cpu)
+{
+
+	if (cpu <= 0 || cpu >= CPU_NUMBER ||
+	    !cpu_available_for_thread(thread_id, cpu))
+		return;
+
+	if (pinned_threads_per_cpu[cpu] == thread_id)
+		pinned_threads_per_cpu[cpu] = -1;
+	else
+		pinned_threads_per_cpu[cpu] = thread_id;
+}
+
+int
+cpu_available_for_thread(int thread_id, int cpu)
+{
+
+	return (pinned_threads_per_cpu[cpu] == thread_id ||
+	    pinned_threads_per_cpu[cpu] == -1);
+}
+
+int
+get_monopolized_cpu_by_thread_id(int thread_id)
+{
+	int cpu;
+
+	for (cpu = 0; cpu < CPU_NUMBER; cpu++) {
+		if (pinned_threads_per_cpu[cpu] == thread_id)
+			return (cpu);
+	}
+
+	return (NOCPU);
 }
