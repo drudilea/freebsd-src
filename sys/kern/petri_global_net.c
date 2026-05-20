@@ -9,10 +9,13 @@
  */
 
 #include <sys/types.h>
+#include <sys/errno.h>
 #include <sys/param.h>
 #include <sys/cpuset.h>
+#include <sys/kernel.h>
 #include <sys/sdt.h>
 #include <sys/smp.h>
+#include <sys/sysctl.h>
 #include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/sched_petri.h>
@@ -41,36 +44,39 @@ SDT_PROBE_DEFINE5(petri, resource, addtoqueue, forced,
 
 const int base_resource_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base matrix */
-	{ 1, 0,-1, 0, 0, 0, 0,-1, 0, 1},
-	{ 1,-1, 0, 0, 0, 0, 0,-1,-1, 1},
-	{ 0,-1, 0, 0, 1, 1,-1, 0, 0, 0},
-	{ 0, 1,-1,-1, 0, 0, 1, 0, 0, 0},
-	{ 0, 0, 1, 1,-1,-1, 0, 0, 0, 0}
+	{ 1, 0,-1, 0, 0, 0, 0, 0,-1, 0, 0, 0, 1},
+	{ 1,-1, 0, 0, 0, 0, 0, 0,-1,-1, 0, 0, 1},
+	{ 0,-1, 0, 0,-1, 1, 1,-1, 0, 0, 0, 0, 0},
+	{ 0, 1,-1,-1, 1, 0, 0, 1, 0, 0, 0, 0, 0},
+	{ 0, 0, 1, 1, 0,-1,-1, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,-1, 0}
 };
 
 const int base_resource_inhibition_matrix[CPU_BASE_PLACES][CPU_BASE_TRANSITIONS] = {
 	/*Base inhibition matrix */
-	{ 0, 0, 0, 1, 0, 0, 0, 0, 1, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	{ 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+	{ 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1}
 };
 
 const char *transitions_names[] = {
-	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0", "ADDTOQUEUE_FORCED_P0",
-	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1", "ADDTOQUEUE_FORCED_P1",
-	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2", "ADDTOQUEUE_FORCED_P2",
-	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3", "ADDTOQUEUE_FORCED_P3",
+	"ADDTOQUEUE_P0", "UNQUEUE_P0", "EXEC_P0", "EXEC_EMPTY_P0", "EXEC_IDLE_P0", "RETURN_VOL_P0", "RETURN_INVOL_P0", "FROM_GLOBAL_CPU_P0", "REMOVE_QUEUE_P0", "REMOVE_EMPTY_QUEUE_P0", "SUSPEND_PROC_P0", "WAKEUP_PROC_P0", "ADDTOQUEUE_FORCED_P0",
+	"ADDTOQUEUE_P1", "UNQUEUE_P1", "EXEC_P1", "EXEC_EMPTY_P1", "EXEC_IDLE_P1", "RETURN_VOL_P1", "RETURN_INVOL_P1", "FROM_GLOBAL_CPU_P1", "REMOVE_QUEUE_P1", "REMOVE_EMPTY_QUEUE_P1", "SUSPEND_PROC_P1", "WAKEUP_PROC_P1", "ADDTOQUEUE_FORCED_P1",
+	"ADDTOQUEUE_P2", "UNQUEUE_P2", "EXEC_P2", "EXEC_EMPTY_P2", "EXEC_IDLE_P2", "RETURN_VOL_P2", "RETURN_INVOL_P2", "FROM_GLOBAL_CPU_P2", "REMOVE_QUEUE_P2", "REMOVE_EMPTY_QUEUE_P2", "SUSPEND_PROC_P2", "WAKEUP_PROC_P2", "ADDTOQUEUE_FORCED_P2",
+	"ADDTOQUEUE_P3", "UNQUEUE_P3", "EXEC_P3", "EXEC_EMPTY_P3", "EXEC_IDLE_P3", "RETURN_VOL_P3", "RETURN_INVOL_P3", "FROM_GLOBAL_CPU_P3", "REMOVE_QUEUE_P3", "REMOVE_EMPTY_QUEUE_P3", "SUSPEND_PROC_P3", "WAKEUP_PROC_P3", "ADDTOQUEUE_FORCED_P3",
 	"REMOVE_GLOBAL_QUEUE", "START_SMP", "THROW", "QUEUE_GLOBAL"
 };
 
 const char *cpu_places_names[] = { "CANTQ", "QUEUE", "CPU", "TOEXEC", "EXECUTING", "SUSPENDED" };
 
-const int hierarchical_transitions[] = { 
+const int hierarchical_transitions[] = {
 	TRAN_ADDTOQUEUE,
 	TRAN_EXEC,
 	TRAN_EXEC_EMPTY,
+	TRAN_EXEC_IDLE,
 	TRAN_RETURN_INVOL,
 	TRAN_RETURN_VOL,
 	TRAN_REMOVE_QUEUE,
@@ -80,10 +86,11 @@ const int hierarchical_transitions[] = {
 	TRAN_REMOVE_GLOBAL_QUEUE
 };
 
-const int hierarchical_corresponse[] = { 
+const int hierarchical_corresponse[] = {
 	TRAN_ON_QUEUE,
 	TRAN_SET_RUNNING,
 	TRAN_SET_RUNNING,
+	TRAN_ON_QUEUE,
 	TRAN_SWITCH_OUT,
 	TRAN_TO_WAIT_CHANNEL,
 	TRAN_REMOVE,
@@ -97,8 +104,16 @@ static void resource_fire_single_transition(struct thread *pt,
     const char *trigger,
     int transition_index);
 static int get_automatic_transitions_sensitized(void);
+static int sysctl_sched_petri_cpu_toggle(SYSCTL_HANDLER_ARGS);
 static __inline int resource_transition_base(int transition_index);
 static __inline int resource_transition_cpu(int transition_index);
+
+SYSCTL_NODE(_kern, OID_AUTO, sched_petri, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
+    "Petri-net scheduler controls");
+SYSCTL_PROC(_kern_sched_petri, OID_AUTO, cpu_toggle,
+    CTLTYPE_INT | CTLFLAG_RW | CTLFLAG_MPSAFE, 0, 0,
+    sysctl_sched_petri_cpu_toggle, "I",
+    "Toggle the Petri-net scheduler state for a CPU by id");
 
 static __inline int
 resource_transition_base(int transition_index)
@@ -216,6 +231,10 @@ void resource_get_sensitized()
 	}
 }
 
+int get_place_tokens_qty(int place_index)
+{
+	return resource_net.mark[place_index];
+}
 
 void resource_fire_net(const char *trigger, struct thread *pt,
     int transition_index)
@@ -358,6 +377,7 @@ int transition_is_sensitized(int transition_index)
 int resource_choose_cpu(struct thread* td)
 {
 	//First we need to know which of the cpu queues is sensitized
+	int cpu;
 	int transition_index;
 	int best = NOCPU;
 
@@ -370,6 +390,7 @@ int resource_choose_cpu(struct thread* td)
 		td->td_lastcpu != NOCPU &&
 			resource_valid_cpu(td->td_lastcpu) &&
 			THREAD_CAN_SCHED(td, td->td_lastcpu) &&
+			!resource_cpu_is_suspended(td->td_lastcpu) &&
 			transition_is_sensitized(td->td_lastcpu * CPU_BASE_TRANSITIONS)
 	) {
 		best = td->td_lastcpu;
@@ -378,17 +399,38 @@ int resource_choose_cpu(struct thread* td)
 
 	//Only check for transitions of addtoqueue
 	for (transition_index = TRAN_ADDTOQUEUE; transition_index < CPU_NUMBER_TRANSITION-4; transition_index += CPU_BASE_TRANSITIONS) {
+		cpu = transition_index / CPU_BASE_TRANSITIONS;
 		if (transition_is_sensitized(transition_index)) {
-			if (!THREAD_CAN_SCHED(td, (transition_index / CPU_BASE_TRANSITIONS)))
+			if (resource_cpu_is_suspended(cpu))
+				continue;
+			if (!THREAD_CAN_SCHED(td, cpu))
 				continue;
 			else {
-				best = (transition_index / CPU_BASE_TRANSITIONS);
+				best = cpu;
 				break;
 			}
 		}
 	}
 
 	return best;
+}
+
+int
+resource_cpu_is_suspended(int cpu)
+{
+	if (cpu < 0 || cpu >= CPU_NUMBER)
+		return (0);
+	return (resource_net.mark[PLACE_SUSPENDED +
+	    (cpu * CPU_BASE_PLACES)] != 0);
+}
+
+void
+resource_wakeup_cpu(int cpu, struct thread *td, char *trigger)
+{
+	if (!resource_cpu_is_suspended(cpu))
+		return;
+	resource_fire_net(trigger, td, (cpu * CPU_BASE_TRANSITIONS) +
+	    TRAN_WAKEUP_PROC);
 }
 
 void resource_expulse_thread(struct thread *td, int flags) {
@@ -457,4 +499,43 @@ void print_detailed_places() {
 
 void set_print_transition(int number_transitions) {
 	transitions_to_print = number_transitions;
+}
+
+static int
+sysctl_sched_petri_cpu_toggle(SYSCTL_HANDLER_ARGS)
+{
+	int cpu;
+	int error;
+
+	cpu = -1;
+	error = sysctl_handle_int(oidp, &cpu, 0, req);
+	if (error != 0 || req->newptr == NULL)
+		return (error);
+	if (cpu <= 0 || cpu >= CPU_NUMBER)
+		return (EINVAL);
+
+	sched_petri_toggle_cpu(cpu);
+	return (0);
+}
+
+void toggle_active_cpu(int cpu) {
+	if (cpu == 0) {
+		printf("toggle_active_cpu error - CPU 0 can not be turn off\n");
+		return;
+	}
+	else if (cpu >= CPU_NUMBER || cpu < 0) {
+		printf("toggle_active_cpu error - CPU %d does not exist\n", cpu);
+		return;
+	}
+
+	printf("TOGGLE ACTIVE/INACTIVE: CPU %d - Thread %2d\n", cpu, curthread->td_tid);
+	int tran_wakeup_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_WAKEUP_PROC;
+	int tran_suspend_index = (cpu*CPU_BASE_TRANSITIONS) + TRAN_SUSPEND_PROC;
+
+	if (transition_is_sensitized(tran_wakeup_index)){
+		resource_fire_net("toggle_active: wakeup", curthread, tran_wakeup_index);
+	}
+	else {
+		resource_fire_net("toggle_active: suspend", curthread, tran_suspend_index);
+	}
 }
