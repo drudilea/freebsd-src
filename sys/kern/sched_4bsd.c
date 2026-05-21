@@ -58,6 +58,8 @@
 #include <machine/pcb.h>
 #include <machine/smp.h>
 
+#include <sys/sched_petri.h>
+
 #ifdef HWPMC_HOOKS
 #include <sys/pmckern.h>
 #endif
@@ -139,6 +141,7 @@ static void	resetpriority(struct thread *td);
 static void	resetpriority_thread(struct thread *td);
 #ifdef SMP
 static int	sched_pickcpu(struct thread *td);
+static int	sched_petrinet_pickcpu(struct thread *td);
 static int	forward_wakeup(int cpunum);
 static void	kick_other_cpu(int pri, int cpuid);
 #endif
@@ -258,6 +261,13 @@ SYSCTL_INT(_kern_sched_4bsd, OID_AUTO, followon, CTLFLAG_RW,
 	   &sched_followon, 0,
 	   "allow threads to share a quantum");
 #endif
+
+SDT_PROVIDER_DECLARE(petri);
+
+SDT_PROBE_DEFINE5(petri, sched, addtoqueue, decision, "struct thread *",
+    "int", "int", "int", "int");
+SDT_PROBE_DEFINE3(petri, sched, addtoqueue, global, "struct thread *",
+    "int", "int");
 
 static __inline void
 sched_load_add(void)
@@ -633,7 +643,7 @@ sched_4bsd_setup(void)
 	ccpu = 0.95122942450071400909 * FSCALE;	/* exp(-1/20) */
 
 	setup_runqs();
-
+	init_resource_net();
 	/* Account for thread0. */
 	sched_load_add();
 
@@ -664,6 +674,8 @@ sched_4bsd_initticks(void)
 static void
 sched_4bsd_init(void)
 {
+	int initial_mark_t0[PLACES_SIZE] = { 0, 0, 0, 1, 0 };
+	int i;
 
 	/*
 	 * Set up the scheduler specific parts of thread0.
@@ -671,6 +683,10 @@ sched_4bsd_init(void)
 	thread0.td_lock = &sched_lock;
 	td_get_sched(&thread0)->ts_slice = sched_slice;
 	mtx_init(&sched_lock, "sched lock", NULL, MTX_SPIN);
+
+	for (i = 0; i < PLACES_SIZE; i++) {
+		thread0.mark[i] = initial_mark_t0[i];
+	}
 }
 
 static void
@@ -806,7 +822,6 @@ static void
 sched_4bsd_fork_thread(struct thread *td, struct thread *childtd)
 {
 	struct td_sched *ts, *tsc;
-
 	childtd->td_oncpu = NOCPU;
 	childtd->td_lastcpu = NOCPU;
 	childtd->td_lock = &sched_lock;
@@ -1014,6 +1029,22 @@ sched_4bsd_sswitch(struct thread *td, int flags)
 	td->td_oncpu = NOCPU;
 
 	/*
+	 * Switch to the sched lock to fix things up and pick
+	 * a new thread.  Block the td_lock in order to avoid
+	 * breaking the critical path.
+	 */
+	if (td->td_lock != &sched_lock) {
+		mtx_lock_spin(&sched_lock);
+		tmtx = thread_lock_block(td);
+		mtx_unlock_spin(tmtx);
+	}
+
+	if ((td->td_flags & TDF_NOLOAD) == 0)
+		sched_load_rem();
+
+	resource_expulse_thread(td, flags);
+
+	/*
 	 * At the last moment, if this thread is still marked RUNNING,
 	 * then put it back on the run queue as it has not been suspended
 	 * or stopped or any thing else similar.  We never put the idle
@@ -1032,21 +1063,8 @@ sched_4bsd_sswitch(struct thread *td, int flags)
 		}
 	}
 
-	/* 
-	 * Switch to the sched lock to fix things up and pick
-	 * a new thread.  Block the td_lock in order to avoid
-	 * breaking the critical path.
-	 */
-	if (td->td_lock != &sched_lock) {
-		mtx_lock_spin(&sched_lock);
-		tmtx = thread_lock_block(td);
-		mtx_unlock_spin(tmtx);
-	}
-
-	if ((td->td_flags & TDF_NOLOAD) == 0)
-		sched_load_rem();
-
 	newtd = choosethread();
+	resource_execute_thread(newtd, PCPU_GET(cpuid));
 	MPASS(newtd->td_lock == &sched_lock);
 
 #if (KTR_COMPILE & KTR_SCHED) != 0
@@ -1301,6 +1319,16 @@ sched_pickcpu(struct thread *td)
 
 	return (best);
 }
+
+static int
+sched_petrinet_pickcpu(struct thread *td)
+{
+	int cpu;
+
+	mtx_assert(&sched_lock, MA_OWNED);
+	cpu = resource_choose_cpu(td);
+	return (cpu);
+}
 #endif
 
 static void
@@ -1309,9 +1337,17 @@ sched_4bsd_add(struct thread *td, int flags)
 {
 	cpuset_t tidlemsk;
 	struct td_sched *ts;
-	u_int cpu, cpuid;
+	u_int cpu = NOCPU, cpuid;
+	int add_transition;
+	int forced_addtoqueue = 0;
+	int addtoqueue_reason = PETRI_ADDQ_REASON_POLICY;
 	int forwarded = 0;
 	int single_cpu = 0;
+
+	if (td != NULL && td->td_frominh == 1) {
+		thread_petri_fire(td, TRAN_WAKEUP);
+		td->td_frominh = 0;
+	}
 
 	ts = td_get_sched(td);
 	THREAD_LOCK_ASSERT(td, MA_OWNED);
@@ -1342,7 +1378,6 @@ sched_4bsd_add(struct thread *td, int flags)
 			thread_lock_set(td, &sched_lock);
 	}
 	TD_SET_RUNQ(td);
-
 	/*
 	 * If SMP is started and the thread is pinned or otherwise limited to
 	 * a specific set of CPUs, queue the thread to a per-CPU run queue.
@@ -1354,17 +1389,54 @@ sched_4bsd_add(struct thread *td, int flags)
 	 */
 	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
 	    ts->ts_flags & TSF_AFFINITY)) {
-		if (td->td_pinned != 0)
-			cpu = td->td_lastcpu;
-		else if (td->td_flags & TDF_BOUND) {
-			/* Find CPU from bound runq. */
-			KASSERT(SKE_RUNQ_PCPU(ts),
-			    ("sched_add: bound td_sched not on cpu runq"));
+		if (td->td_pinned != 0) {
+			if (td->td_lastcpu != NOCPU)
+				cpu = td->td_lastcpu;
+			else
+				cpu = sched_pickcpu(td);
+			forced_addtoqueue = 1;
+			addtoqueue_reason = PETRI_ADDQ_REASON_PINNED;
+		} else if (td->td_flags & TDF_BOUND) {
+			/*
+			 * Find CPU from bound runq, preserving stock 4BSD
+			 * semantics.
+			 */
+			if (!SKE_RUNQ_PCPU(ts)) {
+				panic("sched_add: bound td_sched not on cpu "
+				    "runq, td %p tid %d runq %p", td,
+				    td->td_tid, ts->ts_runq);
+			}
 			cpu = ts->ts_runq - &runq_pcpu[0];
-		} else
-			/* Find a valid CPU for our cpuset */
-			cpu = sched_pickcpu(td);
+			if (!resource_valid_cpu(cpu)) {
+				panic("sched_add: invalid bound cpu %u, td %p "
+				    "tid %d", cpu, td, td->td_tid);
+			}
+			forced_addtoqueue = 1;
+			addtoqueue_reason = PETRI_ADDQ_REASON_BOUND;
+		} else {
+			/* Find a valid CPU for our cpuset. */
+			cpu = sched_petrinet_pickcpu(td);
+			if (cpu == NOCPU) {
+				cpu = sched_pickcpu(td);
+				forced_addtoqueue = 1;
+				addtoqueue_reason =
+				    PETRI_ADDQ_REASON_AFFINITY_FALLBACK;
+			}
+		}
+		if (!resource_valid_cpu(cpu)) {
+			panic("sched_add: invalid selected cpu %u, td %p "
+			    "tid %d", cpu, td, td->td_tid);
+		}
+	}
+
+	if (cpu != NOCPU) {
 		ts->ts_runq = &runq_pcpu[cpu];
+		add_transition = forced_addtoqueue ? TRAN_ADDTOQUEUE_FORCED :
+		    TRAN_ADDTOQUEUE;
+		SDT_PROBE5(petri, sched, addtoqueue, decision, td, cpu,
+		    add_transition, addtoqueue_reason, flags);
+		resource_fire_net("sched_add", td, add_transition +
+		    (cpu * CPU_BASE_TRANSITIONS));
 		single_cpu = 1;
 		CTR3(KTR_RUNQ,
 		    "sched_add: Put td_sched:%p(td:%p) on cpu%d runq", ts, td,
@@ -1373,8 +1445,10 @@ sched_4bsd_add(struct thread *td, int flags)
 		CTR2(KTR_RUNQ,
 		    "sched_add: adding td_sched:%p (td:%p) to gbl runq", ts,
 		    td);
-		cpu = NOCPU;
 		ts->ts_runq = &runq;
+		SDT_PROBE3(petri, sched, addtoqueue, global, td, flags,
+		    smp_started);
+		resource_fire_net("sched_add", td, TRAN_QUEUE_GLOBAL);
 	}
 
 	if ((td->td_flags & TDF_NOLOAD) == 0)
@@ -1385,7 +1459,7 @@ sched_4bsd_add(struct thread *td, int flags)
 
 	cpuid = PCPU_GET(cpuid);
 	if (single_cpu && cpu != cpuid) {
-	        kick_other_cpu(td->td_priority, cpu);
+		kick_other_cpu(td->td_priority, cpu);
 	} else {
 		if (!single_cpu) {
 			tidlemsk = idle_cpus_mask;
@@ -1470,8 +1544,24 @@ sched_4bsd_rem(struct thread *td)
 	if ((td->td_flags & TDF_NOLOAD) == 0)
 		sched_load_rem();
 #ifdef SMP
-	if (ts->ts_runq != &runq)
-		runq_length[ts->ts_runq - runq_pcpu]--;
+	if (ts->ts_runq != &runq) {
+		int cpu;
+
+		if (!SKE_RUNQ_PCPU(ts)) {
+			panic("sched_rem: td_sched not on cpu runq, td %p "
+			    "tid %d runq %p", td, td->td_tid, ts->ts_runq);
+		}
+		cpu = ts->ts_runq - runq_pcpu;
+		if (!resource_valid_cpu(cpu)) {
+			panic("sched_rem: invalid cpu runq %d, td %p tid %d",
+			    cpu, td, td->td_tid);
+		}
+		runq_length[cpu]--;
+		resource_remove_thread(td, cpu);
+	} else {
+		resource_fire_net("sched_rem", td,
+		    TRAN_REMOVE_GLOBAL_QUEUE);
+	}
 #endif
 	runq_remove(ts->ts_runq, td);
 	TD_SET_CAN_RUN(td);
@@ -1502,16 +1592,22 @@ sched_4bsd_choose(void)
 		     PCPU_GET(cpuid));
 		td = tdcpu;
 		rq = &runq_pcpu[PCPU_GET(cpuid)];
+
+		if (td != NULL) {
+			resource_fire_net("sched_choose", td, TRAN_UNQUEUE +
+			    (PCPU_GET(cpuid) * CPU_BASE_TRANSITIONS));
+		}
 	} else {
 		CTR1(KTR_RUNQ, "choosing td_sched %p from main runq", td);
+		resource_fire_net("sched_choose", td, TRAN_FROM_GLOBAL_CPU +
+		    (PCPU_GET(cpuid) * CPU_BASE_TRANSITIONS));
 	}
 
 #else
 	rq = &runq;
 	td = runq_choose(&runq);
 #endif
-
-	if (td) {
+	if (td != NULL) {
 #ifdef SMP
 		if (td == tdcpu)
 			runq_length[PCPU_GET(cpuid)]--;
@@ -1523,6 +1619,15 @@ sched_4bsd_choose(void)
 		    ("sched_choose: thread swapped out"));
 		return (td);
 	}
+	if (PCPU_GET(idlethread)->td_frominh == 1) {
+		thread_petri_fire(PCPU_GET(idlethread), TRAN_WAKEUP);
+		PCPU_GET(idlethread)->td_frominh = 0;
+	}
+	resource_fire_net("sched_choose", PCPU_GET(idlethread),
+	    TRAN_QUEUE_GLOBAL);
+	resource_fire_net("sched_choose", PCPU_GET(idlethread),
+	    TRAN_FROM_GLOBAL_CPU +
+	    (PCPU_GET(cpuid) * CPU_BASE_TRANSITIONS));
 	return (PCPU_GET(idlethread));
 }
 
@@ -1663,6 +1768,7 @@ sched_throw_tail(struct thread *td)
 	KASSERT(curthread->td_md.md_spinlock_count == 1, ("invalid count"));
 
 	newtd = choosethread();
+	resource_execute_thread(newtd, PCPU_GET(cpuid));
 
 #ifdef HWT_HOOKS
 	if (td)
@@ -1710,6 +1816,7 @@ sched_4bsd_throw(struct thread *td)
 	lock_profile_release_lock(&sched_lock.lock_object, true);
 	td->td_lastcpu = td->td_oncpu;
 	td->td_oncpu = NOCPU;
+	resource_expulse_thread(td, SW_VOL);
 
 	sched_throw_tail(td);
 }

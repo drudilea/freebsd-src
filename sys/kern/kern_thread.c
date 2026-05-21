@@ -31,6 +31,7 @@
 #include "opt_witness.h"
 #include "opt_hwpmc_hooks.h"
 #include "opt_hwt_hooks.h"
+#include "opt_sched.h"
 
 #include <sys/systm.h>
 #include <sys/asan.h>
@@ -41,6 +42,9 @@
 #include <sys/proc.h>
 #include <sys/bitstring.h>
 #include <sys/epoch.h>
+#ifdef SCHED_4BSD
+#include <sys/sched_petri.h>
+#endif
 #include <sys/rangelock.h>
 #include <sys/resourcevar.h>
 #include <sys/sdt.h>
@@ -804,6 +808,9 @@ thread_alloc(int pages)
 	kmsan_thread_alloc(td);
 	cpu_thread_alloc(td);
 	EVENTHANDLER_DIRECT_INVOKE(thread_ctor, td);
+#ifdef SCHED_4BSD
+	init_petri_thread(td);
+#endif
 	return (td);
 }
 
