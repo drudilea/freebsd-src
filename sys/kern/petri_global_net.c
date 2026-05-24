@@ -102,6 +102,7 @@ static void resource_fire_single_transition(struct thread *pt,
     int transition_index);
 static int get_automatic_transitions_sensitized(void);
 static int sysctl_sched_petri_monopolize(SYSCTL_HANDLER_ARGS);
+static int sysctl_sched_petri_monopolize_state(SYSCTL_HANDLER_ARGS);
 static __inline int resource_transition_base(int transition_index);
 static __inline int resource_transition_cpu(int transition_index);
 
@@ -111,6 +112,10 @@ SYSCTL_PROC(_kern_sched_petri, OID_AUTO, monopolize,
     CTLTYPE_STRING | CTLFLAG_RW | CTLFLAG_MPSAFE, 0, 0,
     sysctl_sched_petri_monopolize, "A",
     "Toggle monopolization for a thread/cpu pair using tid:cpu");
+SYSCTL_PROC(_kern_sched_petri, OID_AUTO, monopolize_state,
+    CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_MPSAFE, 0, 0,
+    sysctl_sched_petri_monopolize_state, "A",
+    "Current monopolized thread per CPU");
 
 static __inline int
 resource_transition_base(int transition_index)
@@ -375,8 +380,13 @@ int resource_choose_cpu(struct thread* td)
 	int tid = (int)td->td_tid;
 
 	best = get_monopolized_cpu_by_thread_id(tid);
-	if (best != NOCPU)
-		return (best);
+	if (best != NOCPU) {
+		if (THREAD_CAN_SCHED(td, best) &&
+		    transition_is_sensitized(best * CPU_BASE_TRANSITIONS) &&
+		    cpu_available_for_thread(tid, best))
+			return (best);
+		return (NOCPU);
+	}
 
 	if (td->td_lastcpu != NOCPU && !resource_valid_cpu(td->td_lastcpu)) {
 		panic("petri: invalid lastcpu %d in resource_choose_cpu, td %p "
@@ -502,26 +512,69 @@ sysctl_sched_petri_monopolize(SYSCTL_HANDLER_ARGS)
 	return (0);
 }
 
+static int
+sysctl_sched_petri_monopolize_state(SYSCTL_HANDLER_ARGS)
+{
+	char state[128];
+	size_t offset;
+	int cpu;
+	int written;
+
+	offset = 0;
+	for (cpu = 0; cpu < CPU_NUMBER; cpu++) {
+		written = snprintf(state + offset, sizeof(state) - offset,
+		    "%scpu%d:%d", cpu == 0 ? "" : " ", cpu,
+		    pinned_threads_per_cpu[cpu]);
+		if (written < 0)
+			return (EINVAL);
+		if ((size_t)written >= sizeof(state) - offset) {
+			offset = sizeof(state) - 1;
+			break;
+		}
+		offset += written;
+	}
+	state[offset] = '\0';
+
+	return (sysctl_handle_string(oidp, state, sizeof(state), req));
+}
+
 void
 toggle_pin_thread_to_cpu(int thread_id, int cpu)
 {
 
-	if (cpu <= 0 || cpu >= CPU_NUMBER ||
-	    !cpu_available_for_thread(thread_id, cpu))
+	if (cpu <= 0 || cpu >= CPU_NUMBER) {
+		printf("petri monopolize: rejected invalid cpu %d for tid %d\n",
+		    cpu, thread_id);
 		return;
+	}
+	if (!cpu_available_for_thread(thread_id, cpu)) {
+		printf("petri monopolize: rejected tid %d for cpu %d "
+		    "(current tid %d)\n", thread_id, cpu,
+		    pinned_threads_per_cpu[cpu]);
+		return;
+	}
 
-	if (pinned_threads_per_cpu[cpu] == thread_id)
+	if (pinned_threads_per_cpu[cpu] == thread_id) {
 		pinned_threads_per_cpu[cpu] = -1;
-	else
+		printf("petri monopolize: released cpu %d from tid %d\n", cpu,
+		    thread_id);
+	} else {
 		pinned_threads_per_cpu[cpu] = thread_id;
+		printf("petri monopolize: reserved cpu %d for tid %d\n", cpu,
+		    thread_id);
+	}
 }
 
 int
 cpu_available_for_thread(int thread_id, int cpu)
 {
+	int monopolized_cpu;
 
-	return (pinned_threads_per_cpu[cpu] == thread_id ||
-	    pinned_threads_per_cpu[cpu] == -1);
+	monopolized_cpu = get_monopolized_cpu_by_thread_id(thread_id);
+	if (monopolized_cpu != NOCPU)
+		return (monopolized_cpu == cpu);
+
+	return (pinned_threads_per_cpu[cpu] == -1);
 }
 
 int

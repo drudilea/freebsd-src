@@ -1328,6 +1328,7 @@ sched_add(struct thread *td, int flags)
 	int forced_addtoqueue = 0;
 	int addtoqueue_reason = PETRI_ADDQ_REASON_POLICY;
 	int forwarded = 0;
+	int monopolized_cpu;
 	int single_cpu = 0;
 
 	ts = td_get_sched(td);
@@ -1368,9 +1369,17 @@ sched_add(struct thread *td, int flags)
     * as per-CPU state may not be initialized yet and we may crash if we
     * try to access the per-CPU run queues.
     */
-	if (smp_started && (td->td_pinned != 0 || td->td_flags & TDF_BOUND ||
-	    ts->ts_flags & TSF_AFFINITY)) {
-		if (td->td_pinned != 0) {
+	monopolized_cpu = get_monopolized_cpu_by_thread_id(td->td_tid);
+	if (smp_started && (monopolized_cpu != NOCPU || td->td_pinned != 0 ||
+	    td->td_flags & TDF_BOUND || ts->ts_flags & TSF_AFFINITY)) {
+		if (monopolized_cpu != NOCPU) {
+			cpu = sched_petrinet_pickcpu(td);
+			if (cpu != monopolized_cpu) {
+				cpu = monopolized_cpu;
+				forced_addtoqueue = 1;
+				addtoqueue_reason = PETRI_ADDQ_REASON_PINNED;
+			}
+		} else if (td->td_pinned != 0) {
 			if (td->td_lastcpu != NOCPU)
 				cpu = td->td_lastcpu;
 			else
